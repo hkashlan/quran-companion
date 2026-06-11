@@ -65,3 +65,7 @@ packages:
 
 minimumReleaseAgeExclude:
   - nitro-nightly@3.0.1-20260604-184855-0a07991c
+
+allowBuilds:
+  esbuild: true
+  lightningcss: true

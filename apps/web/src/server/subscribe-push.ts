@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@quran/db/db";
 import { pushTokens } from "@quran/db/tables/push-token.drizzle";
 import { createServerFn } from "@tanstack/react-start";
-import { getWebRequest } from "@tanstack/react-start/server";
+import { getRequestHeaders } from "@tanstack/react-start/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -16,8 +16,8 @@ const subscriptionSchema = z.object({
 export const subscribePush = createServerFn({ method: "POST" })
 	.validator(subscriptionSchema)
 	.handler(async ({ data }) => {
-		const request = getWebRequest();
-		const session = await auth.api.getSession({ headers: request.headers });
+		const headers = getRequestHeaders();
+		const session = await auth.api.getSession({ headers });
 		if (!session) throw new Error("unauthorized");
 
 		const existing = await db

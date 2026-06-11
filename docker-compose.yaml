@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: postgres_quran
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: quran
+    volumes:
+      - quran_data:/var/lib/postgresql/data
+    ports:
+      # Host 5732 → container 5432 (clinic2 uses 5632; keep them distinct so both
+      # local stacks can run at once).
+      - "5732:5432"
+
+volumes:
+  quran_data:

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap");
 
 /*
  * Design tokens ported 1:1 from the Expo app's theme/ (single light theme,
@@ -31,8 +32,6 @@
 	--radius-lg: 14px;
 	--radius-xl: 20px;
 }
-
-@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap");
 
 html,
 body {
