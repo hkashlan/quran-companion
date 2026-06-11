@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.output/
+.vercel/
+.turbo/
+.nitro/
+.tanstack/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# build artifacts
+*.tsbuildinfo
+coverage/
+
+# generated route tree (rebuilt by vite)
+**/routeTree.gen.ts
+
+# OS / editor
+.DS_Store
+*.log
+
+# Capacitor native shells (added in Phase 5)
+android/
+ios/

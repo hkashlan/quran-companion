@@ -1,0 +1,32 @@
+{
+  "name": "@quran/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./db": { "types": "./src/db.ts", "import": "./src/db.ts" },
+    "./schema": { "types": "./src/tables/schema.gen.ts", "import": "./src/tables/schema.gen.ts" },
+    "./tables/*": { "types": "./src/tables/*.ts", "import": "./src/tables/*.ts" },
+    "./repositories/*": { "types": "./src/repositories/*.repo.ts", "import": "./src/repositories/*.repo.ts" },
+    "./validation/*": { "types": "./src/validation/*.schema.ts", "import": "./src/validation/*.schema.ts" }
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:barrels": "tsx scripts/generate-barrels.ts",
+    "db:seed": "tsx --env-file=.env scripts/seed.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "drizzle-zod": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.6",
+    "dotenv": "catalog:",
+    "drizzle-kit": "catalog:",
+    "tsx": "^4.21.0"
+  }
+}

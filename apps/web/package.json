@@ -1,0 +1,42 @@
+{
+  "name": "@quran/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 3000",
+    "build": "vite build",
+    "preview": "vite preview",
+    "auth:generate": "pnpm dlx @better-auth/cli generate --config ./src/lib/auth.ts --output ../../packages/db/src/tables/auth.drizzle.ts"
+  },
+  "dependencies": {
+    "@quran/db": "workspace:*",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-router-ssr-query": "catalog:",
+    "@tanstack/react-start": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-form": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "lucide-react": "catalog:",
+    "nitro": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "web-push": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@better-auth/drizzle-adapter": "catalog:",
+    "@inlang/paraglide-js": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/web-push": "^3.6.4",
+    "@vitejs/plugin-react": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

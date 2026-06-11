@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens ported 1:1 from the Expo app's theme/ (single light theme,
+ * Arabic-first / RTL). Cairo is the brand font.
+ */
+@theme {
+	--color-primary: #0a7b4f;
+	--color-primary-light: #e8f5ee;
+	--color-secondary: #1b3a5c;
+	--color-secondary-light: #e8eef5;
+	--color-accent: #c8a44e;
+	--color-accent-light: #f5efe0;
+
+	--color-success: #0a7b4f;
+	--color-error: #c53030;
+	--color-warning: #c8a44e;
+
+	--color-background: #fafbf9;
+	--color-surface: #ffffff;
+	--color-border: #e0e8e0;
+
+	--color-text: #1a2e1a;
+	--color-text-secondary: #5a6e5a;
+	--color-text-light: #8a9a8a;
+
+	--font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 14px;
+	--radius-xl: 20px;
+}
+
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap");
+
+html,
+body {
+	background: var(--color-background);
+	color: var(--color-text);
+	font-family: var(--font-sans);
+}
+
+/* RTL is set on <html dir> by the paraglide locale (Phase 3). */

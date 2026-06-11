@@ -1,0 +1,67 @@
+# pnpm workspace for the Quran Companion monorepo.
+# All dependency versions are pinned here and referenced as "catalog:" in each
+# package.json, so every app/package stays on the same version.
+
+verifyDepsBeforeRun: false
+
+onlyBuiltDependencies:
+  - esbuild
+  - lightningcss
+
+catalogs:
+  default:
+    # React
+    react: "^19.2.6"
+    react-dom: "^19.2.6"
+    "@types/react": "^19.2.15"
+    "@types/react-dom": "^19.2.3"
+
+    # TanStack
+    "@tanstack/router-plugin": "^1.168.9"
+    "@tanstack/react-router": "^1.170.6"
+    "@tanstack/react-router-devtools": "^1.167.0"
+    "@tanstack/react-router-ssr-query": "^1.167.0"
+    "@tanstack/react-start": "^1.168.9"
+    "@tanstack/react-query": "^5.100.11"
+    "@tanstack/react-form": "^1.32.0"
+    "@tanstack/react-table": "^8.21.3"
+    "@tanstack/react-devtools": "^0.10.5"
+    "@tanstack/devtools-vite": "^0.7.0"
+
+    # Build tools
+    vite: "^8.0.14"
+    typescript: "^6.0.3"
+    tailwindcss: "^4.3.0"
+    "@tailwindcss/vite": "^4.3.0"
+    "@vitejs/plugin-react": "^6.0.2"
+    babel-plugin-react-compiler: "^1.0.0"
+
+    # Database
+    drizzle-orm: "^0.45.2"
+    drizzle-kit: "^0.31.9"
+    drizzle-zod: "^0.8.3"
+    pg: "^8.21.0"
+
+    # Auth
+    better-auth: "^1.6.11"
+    "@better-auth/drizzle-adapter": "^1.6.11"
+
+    # i18n / icons
+    "@inlang/paraglide-js": "^2.18.1"
+    lucide-react: "^0.577.0"
+
+    # Push
+    web-push: "^3.6.7"
+
+    # Misc
+    nitro: "npm:nitro-nightly@3.0.1-20260604-184855-0a07991c"
+    zod: "^4.4.3"
+    dotenv: "^17.4.2"
+    "@types/node": "^22.19.19"
+
+packages:
+  - "apps/*"
+  - "packages/*"
+
+minimumReleaseAgeExclude:
+  - nitro-nightly@3.0.1-20260604-184855-0a07991c
