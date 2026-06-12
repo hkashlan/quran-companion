@@ -1,8 +1,10 @@
 import { Button, Card } from "@/components/ui";
 import { LOCALE_LABEL, LOCALES, useI18n, type Locale } from "@/lib/i18n";
 import { signOut } from "@/lib/auth-client";
+import { enablePush } from "@/lib/push-client";
 import { getStudentHome } from "@/server/queries";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_protected/student/settings")({
 	loader: async () => {
@@ -16,10 +18,16 @@ function SettingsScreen() {
 	const { t, locale, setLocale } = useI18n();
 	const navigate = useNavigate();
 	const { user } = Route.useLoaderData();
+	const [pushMsg, setPushMsg] = useState<string | null>(null);
 
 	async function logout() {
 		await signOut();
 		navigate({ to: "/login" });
+	}
+
+	async function notifications() {
+		const res = await enablePush();
+		setPushMsg(res === "subscribed" ? "✓" : res);
 	}
 
 	return (
@@ -52,6 +60,10 @@ function SettingsScreen() {
 				</div>
 			</div>
 
+			<Button variant="outline" onClick={notifications}>
+				{t("settings.enableNotifications")}
+				{pushMsg ? ` — ${pushMsg}` : ""}
+			</Button>
 			<Button variant="outline">{t("settings.changePassword")}</Button>
 			<Button variant="outline" onClick={logout}>
 				{t("settings.logout")}

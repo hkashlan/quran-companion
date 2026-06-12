@@ -30,6 +30,11 @@ function today(): string {
 	return new Date().toISOString().slice(0, 10);
 }
 
+/** Public VAPID key for the client push-subscribe flow ("" if unconfigured). */
+export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(async () => {
+	return { key: process.env.VAPID_PUBLIC_KEY ?? "" };
+});
+
 /** Minimal current-user info for headers/settings. */
 export const getMe = createServerFn({ method: "GET" }).handler(async () => {
 	const u = await requireUser();
