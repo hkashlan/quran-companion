@@ -42,7 +42,13 @@ function TeacherHome() {
 							<div className="flex flex-col divide-y divide-border border-t border-border">
 								{c.students.map((s) => (
 									<div key={s.id} className="flex items-center justify-between gap-2 py-2">
-										<span className="text-[13px] font-semibold text-text">{s.name}</span>
+										<Link
+											to="/student-detail"
+											search={{ studentId: s.id }}
+											className="text-[13px] font-semibold text-text underline-offset-2 hover:underline"
+										>
+											{s.name}
+										</Link>
 										<div className="flex gap-1">
 											<Link
 												to="/assign-review"

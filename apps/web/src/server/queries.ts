@@ -167,6 +167,71 @@ export const respondJoinRequest = createServerFn({ method: "POST" })
 		return { ok: true };
 	});
 
+/** Teacher: full detail for one student — info, active plan, reviews, sessions. */
+export const getStudentDetail = createServerFn({ method: "GET" })
+	.validator(z.object({ studentId: z.string() }))
+	.handler(async ({ data }) => {
+		await requireUser();
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		const { sessionRecords } = await import("@quran/db/tables/session-record.drizzle");
+		const [student] = await db
+			.select({
+				id: userTable.id,
+				name: userTable.name,
+				email: userTable.email,
+				points: userTable.points,
+				streak: userTable.streak,
+			})
+			.from(userTable)
+			.where(eq(userTable.id, data.studentId))
+			.limit(1);
+		const [plan] = await db
+			.select()
+			.from(reviewPlans)
+			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)))
+			.limit(1);
+		const reviewRows = await db
+			.select({
+				id: reviews.id,
+				surahName: reviews.surahName,
+				verseFrom: reviews.verseFrom,
+				verseTo: reviews.verseTo,
+				assignedDate: reviews.assignedDate,
+				status: reviews.status,
+				pointsEarned: reviews.pointsEarned,
+			})
+			.from(reviews)
+			.where(eq(reviews.studentId, data.studentId))
+			.orderBy(reviews.assignedDate);
+		const sessionRows = await db
+			.select({
+				id: sessionRecords.id,
+				memorizedSurah: sessionRecords.memorizedSurah,
+				memorizedVerseFrom: sessionRecords.memorizedVerseFrom,
+				memorizedVerseTo: sessionRecords.memorizedVerseTo,
+				sessionDate: sessionRecords.sessionDate,
+				evaluation: sessionRecords.evaluation,
+			})
+			.from(sessionRecords)
+			.where(eq(sessionRecords.studentId, data.studentId))
+			.orderBy(sessionRecords.sessionDate);
+		return { student: student ?? null, plan: plan ?? null, reviews: reviewRows, sessions: sessionRows };
+	});
+
+/** Teacher: deactivate a student's active review plan. */
+export const removeReviewPlan = createServerFn({ method: "POST" })
+	.validator(z.object({ studentId: z.string() }))
+	.handler(async ({ data }) => {
+		await requireUser();
+		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		await db
+			.update(reviewPlans)
+			.set({ isActive: false })
+			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)));
+		return { ok: true };
+	});
+
 /** Current student's reviews + sessions for the progress screen. */
 export const getStudentProgress = createServerFn({ method: "GET" }).handler(async () => {
 	const u = await requireUser();
