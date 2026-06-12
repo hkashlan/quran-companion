@@ -69,5 +69,6 @@ query param if you prefer — Vercel cron supports custom headers on Pro.)
 - [ ] Screens still to port: progress charts, assign-review / add-session /
       submit-review modals, teacher-student detail, auth email-confirm + reset,
       change-password, forgot-password
-- [ ] Email provider wiring (Resend) for confirm/reset
+- [x] Email provider wiring (Resend) for confirm/reset — set `RESEND_API_KEY` +
+      `EMAIL_FROM`; without a key it falls back to logging the OTP (dev)
 - [ ] Native (Capacitor) — see CAPACITOR.md

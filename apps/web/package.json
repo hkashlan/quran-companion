@@ -24,6 +24,7 @@
     "nitro": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "resend": "^4.8.0",
     "web-push": "catalog:",
     "zod": "catalog:"
   },
