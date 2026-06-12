@@ -1,5 +1,5 @@
-import { runDailyScheduler } from "@/server/scheduler";
 import { createFileRoute } from "@tanstack/react-router";
+import { runDailyScheduler } from "@/server/scheduler";
 
 /**
  * Daily scheduler — replaces the Python `procrastinate` worker +
@@ -18,7 +18,11 @@ export const Route = createFileRoute("/api/cron/daily")({
 				}
 				const today = new Date().toISOString().slice(0, 10);
 				const summary = await runDailyScheduler(today);
-				return Response.json({ ok: true, ranAt: new Date().toISOString(), ...summary });
+				return Response.json({
+					ok: true,
+					ranAt: new Date().toISOString(),
+					...summary,
+				});
 			},
 		},
 	},

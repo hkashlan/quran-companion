@@ -1,4 +1,8 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type {
+	ButtonHTMLAttributes,
+	InputHTMLAttributes,
+	ReactNode,
+} from "react";
 
 /** Shared primitives themed to the ported design tokens (emerald / Cairo). */
 
@@ -57,7 +61,11 @@ export function Card({
 	children: ReactNode;
 }) {
 	return (
-		<div className={`rounded-xl border border-border bg-surface p-4 ${className}`}>{children}</div>
+		<div
+			className={`rounded-xl border border-border bg-surface p-4 ${className}`}
+		>
+			{children}
+		</div>
 	);
 }
 
@@ -80,11 +88,14 @@ export function StatCard({
 	}[tone];
 	return (
 		<button
+			type="button"
 			onClick={onClick}
 			className={`flex flex-1 flex-col items-center gap-1 rounded-md border border-border ${toneBg} px-1 py-2 active:opacity-80`}
 		>
 			<span className="text-[18px] font-bold text-text">{value}</span>
-			<span className="text-center text-[9px] text-text-secondary">{label}</span>
+			<span className="text-center text-[9px] text-text-secondary">
+				{label}
+			</span>
 		</button>
 	);
 }
@@ -106,7 +117,9 @@ export function Section({
 }) {
 	return (
 		<section className={`flex flex-col gap-3 ${className}`}>
-			{title ? <h2 className="text-[13px] font-bold text-text">{title}</h2> : null}
+			{title ? (
+				<h2 className="text-[13px] font-bold text-text">{title}</h2>
+			) : null}
 			{children}
 		</section>
 	);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, type ReactNode, useContext, useState } from "react";
 
 /**
  * Lightweight typed i18n (AR/EN/DE) with RTL handling. Interim layer that keeps
@@ -428,11 +428,15 @@ export function I18nProvider({
 	const [locale, setLocale] = useState<Locale>(initialLocale);
 	const t = (key: string, vars?: Record<string, string | number>) => {
 		let s = messages[locale][key] ?? messages.en[key] ?? key;
-		if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
+		if (vars)
+			for (const [k, v] of Object.entries(vars))
+				s = s.replace(`{${k}}`, String(v));
 		return s;
 	};
 	return (
-		<Ctx.Provider value={{ locale, rtl: isRtl(locale), setLocale, t }}>{children}</Ctx.Provider>
+		<Ctx.Provider value={{ locale, rtl: isRtl(locale), setLocale, t }}>
+			{children}
+		</Ctx.Provider>
 	);
 }
 

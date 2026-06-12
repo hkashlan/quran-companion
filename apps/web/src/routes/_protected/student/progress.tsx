@@ -1,7 +1,7 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { ReviewProgress } from "@/components/ReviewProgress";
 import { useI18n } from "@/lib/i18n";
 import { getStudentProgress } from "@/server/queries";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_protected/student/progress")({
 	loader: async () => getStudentProgress(),

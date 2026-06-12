@@ -1,5 +1,5 @@
-import { db } from "@quran/db/db";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { db } from "@quran/db/db";
 import { betterAuth } from "better-auth";
 import { emailOTP } from "better-auth/plugins";
 
@@ -45,10 +45,25 @@ export const auth = betterAuth({
 	user: {
 		additionalFields: {
 			role: { type: "string", required: true, input: true },
-			points: { type: "number", required: false, defaultValue: 0, input: false },
-			streak: { type: "number", required: false, defaultValue: 0, input: false },
+			points: {
+				type: "number",
+				required: false,
+				defaultValue: 0,
+				input: false,
+			},
+			streak: {
+				type: "number",
+				required: false,
+				defaultValue: 0,
+				input: false,
+			},
 			streakLastDate: { type: "string", required: false, input: false },
-			language: { type: "string", required: false, defaultValue: "ar", input: true },
+			language: {
+				type: "string",
+				required: false,
+				defaultValue: "ar",
+				input: true,
+			},
 			timezone: { type: "string", required: false, input: true },
 		},
 	},

@@ -2,7 +2,10 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../db.ts";
 import { circleMemberships } from "../tables/circle-membership.drizzle.ts";
-import { learningCircles, learningCircleSlots } from "../tables/learning-circle.drizzle.ts";
+import {
+	learningCircleSlots,
+	learningCircles,
+} from "../tables/learning-circle.drizzle.ts";
 
 export type CircleSummary = {
 	id: string;
@@ -15,7 +18,9 @@ export type CircleSummary = {
 };
 
 /** Circles the user belongs to, with their role and a student count. */
-export async function listCirclesForUser(userId: string): Promise<CircleSummary[]> {
+export async function listCirclesForUser(
+	userId: string,
+): Promise<CircleSummary[]> {
 	const memberships = await db
 		.select({
 			id: learningCircles.id,
@@ -26,7 +31,10 @@ export async function listCirclesForUser(userId: string): Promise<CircleSummary[
 			memberRole: circleMemberships.role,
 		})
 		.from(circleMemberships)
-		.innerJoin(learningCircles, eq(circleMemberships.circleId, learningCircles.id))
+		.innerJoin(
+			learningCircles,
+			eq(circleMemberships.circleId, learningCircles.id),
+		)
 		.where(eq(circleMemberships.userId, userId))
 		.orderBy(learningCircles.createdAt);
 
@@ -35,7 +43,12 @@ export async function listCirclesForUser(userId: string): Promise<CircleSummary[
 		const [{ count }] = await db
 			.select({ count: sql<number>`count(*)` })
 			.from(circleMemberships)
-			.where(and(eq(circleMemberships.circleId, m.id), eq(circleMemberships.role, "student")));
+			.where(
+				and(
+					eq(circleMemberships.circleId, m.id),
+					eq(circleMemberships.role, "student"),
+				),
+			);
 		result.push({ ...m, studentsCount: Number(count) });
 	}
 	return result;

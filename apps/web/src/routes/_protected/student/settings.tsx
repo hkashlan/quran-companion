@@ -1,10 +1,10 @@
-import { Button, Card } from "@/components/ui";
-import { LOCALE_LABEL, LOCALES, useI18n, type Locale } from "@/lib/i18n";
-import { signOut } from "@/lib/auth-client";
-import { enablePush } from "@/lib/push-client";
-import { getStudentHome } from "@/server/queries";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { Button, Card } from "@/components/ui";
+import { signOut } from "@/lib/auth-client";
+import { LOCALE_LABEL, LOCALES, type Locale, useI18n } from "@/lib/i18n";
+import { enablePush } from "@/lib/push-client";
+import { getStudentHome } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student/settings")({
 	loader: async () => {
@@ -42,10 +42,13 @@ function SettingsScreen() {
 			</Card>
 
 			<div className="flex flex-col gap-2">
-				<span className="text-[13px] font-semibold text-text">{t("settings.language")}</span>
+				<span className="text-[13px] font-semibold text-text">
+					{t("settings.language")}
+				</span>
 				<div className="flex gap-2">
 					{LOCALES.map((l: Locale) => (
 						<button
+							type="button"
 							key={l}
 							onClick={() => setLocale(l)}
 							className={`flex-1 rounded-md border px-3 py-2 text-[13px] font-semibold ${
@@ -64,13 +67,18 @@ function SettingsScreen() {
 				{t("settings.enableNotifications")}
 				{pushMsg ? ` — ${pushMsg}` : ""}
 			</Button>
-			<Button variant="outline" onClick={() => navigate({ to: "/change-password" })}>
+			<Button
+				variant="outline"
+				onClick={() => navigate({ to: "/change-password" })}
+			>
 				{t("settings.changePassword")}
 			</Button>
 			<Button variant="outline" onClick={logout}>
 				{t("settings.logout")}
 			</Button>
-			<p className="text-center text-[12px] text-text-light">{t("settings.version")} 1.0.0</p>
+			<p className="text-center text-[12px] text-text-light">
+				{t("settings.version")} 1.0.0
+			</p>
 		</div>
 	);
 }

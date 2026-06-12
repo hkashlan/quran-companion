@@ -1,9 +1,9 @@
-import { Button, Card, Section, StatCard, TextInput } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
-import { getStudentHome, joinCircleByCode } from "@/server/queries";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { BookOpen, MapPin, Search } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button, Card, Section, StatCard, TextInput } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
+import { getStudentHome, joinCircleByCode } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student/")({
 	loader: async () => getStudentHome(),
@@ -18,7 +18,9 @@ function useCountdownToMidnight() {
 			const midnight = new Date(now);
 			midnight.setHours(24, 0, 0, 0);
 			const mins = Math.floor((midnight.getTime() - now.getTime()) / 60000);
-			setText(`${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`);
+			setText(
+				`${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`,
+			);
 		};
 		tick();
 		const id = setInterval(tick, 30000);
@@ -36,8 +38,12 @@ function reviewRange(r: {
 	startPage: number | null;
 	endPage: number | null;
 }): string {
-	if (r.rangeMode === "pages" && r.startPage && r.endPage) return `ص ${r.startPage}–${r.endPage}`;
-	const end = r.endSurahName && r.endSurahName !== r.surahName ? ` – ${r.endSurahName}` : "";
+	if (r.rangeMode === "pages" && r.startPage && r.endPage)
+		return `ص ${r.startPage}–${r.endPage}`;
+	const end =
+		r.endSurahName && r.endSurahName !== r.surahName
+			? ` – ${r.endSurahName}`
+			: "";
 	return `${r.surahName}${end}: ${r.verseFrom}–${r.verseTo}`;
 }
 
@@ -77,22 +83,44 @@ function StudentHome() {
 			</header>
 
 			<div className="flex gap-2">
-				<StatCard value={data.stats.points} label={t("home.points")} tone="primary" />
-				<StatCard value={data.stats.completed} label={t("home.completed")} tone="success" />
-				<StatCard value={`${data.stats.onTime}%`} label={t("home.onTime")} tone="warning" />
-				<StatCard value={data.stats.streak} label={t("home.streak")} tone="secondary" />
+				<StatCard
+					value={data.stats.points}
+					label={t("home.points")}
+					tone="primary"
+				/>
+				<StatCard
+					value={data.stats.completed}
+					label={t("home.completed")}
+					tone="success"
+				/>
+				<StatCard
+					value={`${data.stats.onTime}%`}
+					label={t("home.onTime")}
+					tone="warning"
+				/>
+				<StatCard
+					value={data.stats.streak}
+					label={t("home.streak")}
+					tone="secondary"
+				/>
 			</div>
 
 			<div className="flex items-center justify-center gap-2 text-secondary">
 				<span className="text-[16px] font-bold">{countdown}</span>
-				<span className="text-[13px] text-text-secondary">{t("home.timeRemaining")}</span>
+				<span className="text-[13px] text-text-secondary">
+					{t("home.timeRemaining")}
+				</span>
 			</div>
 
 			{data.circles.length === 0 ? (
 				<Card className="flex flex-col items-center gap-3 text-center">
 					<BookOpen className="text-primary" size={36} />
-					<p className="text-[15px] font-bold text-text">{t("home.noCircle")}</p>
-					<p className="text-[13px] text-text-secondary">{t("home.findCircle")}</p>
+					<p className="text-[15px] font-bold text-text">
+						{t("home.noCircle")}
+					</p>
+					<p className="text-[13px] text-text-secondary">
+						{t("home.findCircle")}
+					</p>
 					<div className="flex w-full gap-2">
 						<TextInput
 							placeholder={t("home.enterCode")}
@@ -101,6 +129,7 @@ function StudentHome() {
 							maxLength={8}
 						/>
 						<button
+							type="button"
 							onClick={join}
 							disabled={joining}
 							className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-lg bg-primary text-white disabled:opacity-60"
@@ -108,19 +137,30 @@ function StudentHome() {
 							<Search size={22} />
 						</button>
 					</div>
-					{joinMsg ? <p className="text-[13px] text-text-secondary">{joinMsg}</p> : null}
+					{joinMsg ? (
+						<p className="text-[13px] text-text-secondary">{joinMsg}</p>
+					) : null}
 				</Card>
 			) : (
 				<Section title={t("home.myCircles")}>
 					<Card className="flex flex-col gap-3 p-3">
 						{data.circles.map((c) => (
-							<div key={c.id} className="flex flex-col gap-1 border-b border-border pb-3 last:border-0 last:pb-0">
+							<div
+								key={c.id}
+								className="flex flex-col gap-1 border-b border-border pb-3 last:border-0 last:pb-0"
+							>
 								<div className="flex items-center justify-between">
-									<span className="text-[14px] font-bold text-text">{c.title}</span>
-									<span className="text-[12px] text-text-secondary">{c.code}</span>
+									<span className="text-[14px] font-bold text-text">
+										{c.title}
+									</span>
+									<span className="text-[12px] text-text-secondary">
+										{c.code}
+									</span>
 								</div>
 								{c.description ? (
-									<span className="text-[12px] text-text-secondary">{c.description}</span>
+									<span className="text-[12px] text-text-secondary">
+										{c.description}
+									</span>
 								) : null}
 								{c.location ? (
 									<span className="flex items-center gap-1 text-[12px] text-text-light">
@@ -143,7 +183,7 @@ function StudentHome() {
 							onClick={() =>
 								router.navigate({
 									to: "/submit-review",
-									search: { reviewId: data.activeReview!.id },
+									search: { reviewId: data.activeReview?.id },
 								})
 							}
 						>
@@ -161,7 +201,10 @@ function StudentHome() {
 				<Section title={t("home.pendingReviews")}>
 					<Card className="flex flex-col gap-2 p-3">
 						{data.undoneReviews.map((r) => (
-							<div key={r.id} className="flex items-center justify-between gap-2 text-[12px]">
+							<div
+								key={r.id}
+								className="flex items-center justify-between gap-2 text-[12px]"
+							>
 								<span className="flex items-center gap-2">
 									<span
 										className={`h-2 w-2 rounded-full ${r.status === "missed" ? "bg-error" : "bg-text-light"}`}

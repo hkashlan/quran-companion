@@ -6,7 +6,6 @@ import { GoogleAuth } from "google-auth-library";
  * / FCM_PRIVATE_KEY); otherwise it no-ops so Web Push is unaffected.
  */
 let auth: GoogleAuth | null = null;
-let projectId: string | null = null;
 
 function getAuth(): { auth: GoogleAuth; projectId: string } | null {
 	const pid = process.env.FCM_PROJECT_ID;
@@ -19,15 +18,21 @@ function getAuth(): { auth: GoogleAuth; projectId: string } | null {
 			credentials: { client_email: clientEmail, private_key: privateKey },
 			scopes: ["https://www.googleapis.com/auth/firebase.messaging"],
 		});
-		projectId = pid;
 	}
-	return { auth, projectId: projectId! };
+	return { auth, projectId: pid };
 }
 
-export type FcmMessage = { title: string; body: string; data?: Record<string, unknown> };
+export type FcmMessage = {
+	title: string;
+	body: string;
+	data?: Record<string, unknown>;
+};
 
 /** Send one FCM message to a device token. Returns "ok" | "gone" | "skip" | "error". */
-export async function sendFcm(token: string, msg: FcmMessage): Promise<"ok" | "gone" | "skip" | "error"> {
+export async function sendFcm(
+	token: string,
+	msg: FcmMessage,
+): Promise<"ok" | "gone" | "skip" | "error"> {
 	const cfg = getAuth();
 	if (!cfg) return "skip";
 	try {
@@ -41,9 +46,16 @@ export async function sendFcm(token: string, msg: FcmMessage): Promise<"ok" | "g
 			`https://fcm.googleapis.com/v1/projects/${cfg.projectId}/messages:send`,
 			{
 				method: "POST",
-				headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+				headers: {
+					Authorization: `Bearer ${accessToken}`,
+					"Content-Type": "application/json",
+				},
 				body: JSON.stringify({
-					message: { token, notification: { title: msg.title, body: msg.body }, data },
+					message: {
+						token,
+						notification: { title: msg.title, body: msg.body },
+						data,
+					},
 				}),
 			},
 		);

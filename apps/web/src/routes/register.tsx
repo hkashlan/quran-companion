@@ -1,10 +1,10 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { GraduationCap, Lock, Mail, User, Users } from "lucide-react";
+import { useState } from "react";
 import { AuthShell, OtpInput } from "@/components/auth-ui";
 import { Button, TextInput } from "@/components/ui";
 import { emailOtp, signUp } from "@/lib/auth-client";
 import { useI18n } from "@/lib/i18n";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { GraduationCap, Lock, Mail, User, Users } from "lucide-react";
-import { useState } from "react";
 
 export const Route = createFileRoute("/register")({ component: RegisterPage });
 
@@ -48,9 +48,14 @@ function RegisterPage() {
 
 	if (confirming) {
 		return (
-			<AuthShell title={t("auth.confirmTitle")} subtitle={t("auth.confirmHint")}>
+			<AuthShell
+				title={t("auth.confirmTitle")}
+				subtitle={t("auth.confirmHint")}
+			>
 				<form onSubmit={onConfirm} className="flex flex-col gap-3">
-					<p className="text-center text-[14px] font-semibold text-primary">{email}</p>
+					<p className="text-center text-[14px] font-semibold text-primary">
+						{email}
+					</p>
 					<OtpInput value={otp} onChange={setOtp} />
 					{error ? <p className="text-[13px] text-error">{error}</p> : null}
 					<Button type="submit" loading={loading}>
@@ -58,7 +63,12 @@ function RegisterPage() {
 					</Button>
 					<button
 						type="button"
-						onClick={() => emailOtp.sendVerificationOtp({ email, type: "email-verification" })}
+						onClick={() =>
+							emailOtp.sendVerificationOtp({
+								email,
+								type: "email-verification",
+							})
+						}
 						className="text-[13px] font-semibold text-primary"
 					>
 						{t("auth.resend")}
@@ -69,17 +79,43 @@ function RegisterPage() {
 	}
 
 	const roles: { value: Role; label: string; icon: React.ReactNode }[] = [
-		{ value: "student", label: t("auth.student"), icon: <GraduationCap size={28} /> },
+		{
+			value: "student",
+			label: t("auth.student"),
+			icon: <GraduationCap size={28} />,
+		},
 		{ value: "teacher", label: t("auth.teacher"), icon: <Users size={28} /> },
 	];
 
 	return (
 		<AuthShell title={t("auth.register")} subtitle={t("auth.subtitle")}>
 			<form onSubmit={onRegister} className="flex flex-col gap-3">
-				<TextInput icon={<User size={20} />} placeholder={t("auth.name")} value={name} onChange={(e) => setName(e.target.value)} required />
-				<TextInput icon={<Mail size={20} />} type="email" placeholder={t("auth.email")} value={email} onChange={(e) => setEmail(e.target.value)} required />
-				<TextInput icon={<Lock size={20} />} type="password" placeholder={t("auth.password")} value={password} onChange={(e) => setPassword(e.target.value)} required />
-				<span className="text-[14px] font-semibold text-text">{t("auth.role")}</span>
+				<TextInput
+					icon={<User size={20} />}
+					placeholder={t("auth.name")}
+					value={name}
+					onChange={(e) => setName(e.target.value)}
+					required
+				/>
+				<TextInput
+					icon={<Mail size={20} />}
+					type="email"
+					placeholder={t("auth.email")}
+					value={email}
+					onChange={(e) => setEmail(e.target.value)}
+					required
+				/>
+				<TextInput
+					icon={<Lock size={20} />}
+					type="password"
+					placeholder={t("auth.password")}
+					value={password}
+					onChange={(e) => setPassword(e.target.value)}
+					required
+				/>
+				<span className="text-[14px] font-semibold text-text">
+					{t("auth.role")}
+				</span>
 				<div className="flex gap-3">
 					{roles.map((r) => (
 						<button

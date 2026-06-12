@@ -30,6 +30,9 @@ export const circleMemberships = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [
-		unique("uq_circle_memberships_circle_user").on(table.circleId, table.userId),
+		unique("uq_circle_memberships_circle_user").on(
+			table.circleId,
+			table.userId,
+		),
 	],
 );

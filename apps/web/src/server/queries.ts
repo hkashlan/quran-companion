@@ -1,18 +1,24 @@
-import { auth } from "@/lib/auth";
 import { db } from "@quran/db/db";
-import { joinRequests } from "@quran/db/tables/join-request.drizzle";
-import { reviews } from "@quran/db/tables/review.drizzle";
-import { listCirclesForUser, findCircleByCode } from "@quran/db/repositories/circle";
-import { getLeaderboard, type LeaderboardPeriod } from "@quran/db/repositories/leaderboard";
+import {
+	findCircleByCode,
+	listCirclesForUser,
+} from "@quran/db/repositories/circle";
+import {
+	getLeaderboard,
+	type LeaderboardPeriod,
+} from "@quran/db/repositories/leaderboard";
 import {
 	listNotifications,
 	markAllRead,
 	unreadCount,
 } from "@quran/db/repositories/notification";
+import { joinRequests } from "@quran/db/tables/join-request.drizzle";
+import { reviews } from "@quran/db/tables/review.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { auth } from "@/lib/auth";
 
 async function requireUser() {
 	const session = await auth.api.getSession({ headers: getRequestHeaders() });
@@ -31,60 +37,78 @@ function today(): string {
 }
 
 /** Public VAPID key for the client push-subscribe flow ("" if unconfigured). */
-export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(async () => {
-	return { key: process.env.VAPID_PUBLIC_KEY ?? "" };
-});
+export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(
+	async () => {
+		return { key: process.env.VAPID_PUBLIC_KEY ?? "" };
+	},
+);
 
 /** Minimal current-user info for headers/settings. */
 export const getMe = createServerFn({ method: "GET" }).handler(async () => {
 	const u = await requireUser();
-	return { id: u.id, name: u.name, role: u.role, points: u.points, streak: u.streak };
+	return {
+		id: u.id,
+		name: u.name,
+		role: u.role,
+		points: u.points,
+		streak: u.streak,
+	};
 });
 
 /** Student home payload: circles, active + undone reviews, and the 4 stat cards. */
-export const getStudentHome = createServerFn({ method: "GET" }).handler(async () => {
-	const u = await requireUser();
-	const circles = await listCirclesForUser(u.id);
+export const getStudentHome = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const circles = await listCirclesForUser(u.id);
 
-	const pending = await db
-		.select()
-		.from(reviews)
-		.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "pending")))
-		.orderBy(desc(reviews.assignedDate));
+		const pending = await db
+			.select()
+			.from(reviews)
+			.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "pending")))
+			.orderBy(desc(reviews.assignedDate));
 
-	const missed = await db
-		.select()
-		.from(reviews)
-		.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "missed")))
-		.orderBy(desc(reviews.assignedDate));
+		const missed = await db
+			.select()
+			.from(reviews)
+			.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "missed")))
+			.orderBy(desc(reviews.assignedDate));
 
-	const [{ completed }] = await db
-		.select({ completed: count() })
-		.from(reviews)
-		.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "completed")));
+		const [{ completed }] = await db
+			.select({ completed: count() })
+			.from(reviews)
+			.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "completed")));
 
-	const [{ onTime }] = await db
-		.select({ onTime: count() })
-		.from(reviews)
-		.where(
-			and(
-				eq(reviews.studentId, u.id),
-				eq(reviews.status, "completed"),
-				sql`${reviews.completedAt} is not null`,
-			),
-		);
+		const [{ onTime }] = await db
+			.select({ onTime: count() })
+			.from(reviews)
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.status, "completed"),
+					sql`${reviews.completedAt} is not null`,
+				),
+			);
 
-	const completedCount = Number(completed);
-	const onTimeRate = completedCount > 0 ? Math.round((Number(onTime) / completedCount) * 100) : 0;
+		const completedCount = Number(completed);
+		const onTimeRate =
+			completedCount > 0
+				? Math.round((Number(onTime) / completedCount) * 100)
+				: 0;
 
-	return {
-		user: { id: u.id, name: u.name, points: u.points, streak: u.streak },
-		circles,
-		activeReview: pending[0] ?? null,
-		undoneReviews: [...pending.slice(1), ...missed],
-		stats: { points: u.points, completed: completedCount, onTime: onTimeRate, streak: u.streak },
-	};
-});
+		return {
+			user: { id: u.id, name: u.name, points: u.points, streak: u.streak },
+			circles,
+			activeReview: pending[0] ?? null,
+			undoneReviews: [...pending.slice(1), ...missed],
+			stats: {
+				points: u.points,
+				completed: completedCount,
+				onTime: onTimeRate,
+				streak: u.streak,
+			},
+		};
+	},
+);
 
 export const getLeaderboardData = createServerFn({ method: "GET" })
 	.validator((d: { period: LeaderboardPeriod }) => d)
@@ -94,64 +118,96 @@ export const getLeaderboardData = createServerFn({ method: "GET" })
 		return { entries, meId: u.id };
 	});
 
-export const getNotifications = createServerFn({ method: "GET" }).handler(async () => {
-	const u = await requireUser();
-	const [items, unread] = await Promise.all([listNotifications(u.id), unreadCount(u.id)]);
-	return { items, unread };
-});
+export const getNotifications = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const [items, unread] = await Promise.all([
+			listNotifications(u.id),
+			unreadCount(u.id),
+		]);
+		return { items, unread };
+	},
+);
 
-export const markAllNotificationsRead = createServerFn({ method: "POST" }).handler(async () => {
+export const markAllNotificationsRead = createServerFn({
+	method: "POST",
+}).handler(async () => {
 	const u = await requireUser();
 	const marked = await markAllRead(u.id);
 	return { marked };
 });
 
 /** Teacher: circles I own/teach, each with its student members. */
-export const getTeacherHome = createServerFn({ method: "GET" }).handler(async () => {
-	const u = await requireUser();
-	const circles = await listCirclesForUser(u.id);
-	const { circleMemberships } = await import("@quran/db/tables/circle-membership.drizzle");
-	const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-	const withStudents = await Promise.all(
-		circles.map(async (c) => {
-			const students = await db
-				.select({ id: userTable.id, name: userTable.name })
-				.from(circleMemberships)
-				.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
-				.where(and(eq(circleMemberships.circleId, c.id), eq(circleMemberships.role, "student")));
-			return { ...c, students };
-		}),
-	);
-	return { user: { id: u.id, name: u.name }, circles: withStudents };
-});
+export const getTeacherHome = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const circles = await listCirclesForUser(u.id);
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		const withStudents = await Promise.all(
+			circles.map(async (c) => {
+				const students = await db
+					.select({ id: userTable.id, name: userTable.name })
+					.from(circleMemberships)
+					.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+					.where(
+						and(
+							eq(circleMemberships.circleId, c.id),
+							eq(circleMemberships.role, "student"),
+						),
+					);
+				return { ...c, students };
+			}),
+		);
+		return { user: { id: u.id, name: u.name }, circles: withStudents };
+	},
+);
 
 /** Teacher: pending join requests across circles I own. */
-export const getJoinRequests = createServerFn({ method: "GET" }).handler(async () => {
-	const u = await requireUser();
-	const { learningCircles } = await import("@quran/db/tables/learning-circle.drizzle");
-	const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-	const rows = await db
-		.select({
-			id: joinRequests.id,
-			status: joinRequests.status,
-			requestedRole: joinRequests.requestedRole,
-			circleTitle: learningCircles.title,
-			userName: userTable.name,
-			userEmail: userTable.email,
-		})
-		.from(joinRequests)
-		.innerJoin(learningCircles, eq(joinRequests.circleId, learningCircles.id))
-		.innerJoin(userTable, eq(joinRequests.userId, userTable.id))
-		.where(and(eq(learningCircles.ownerTeacherId, u.id), eq(joinRequests.status, "pending")))
-		.orderBy(desc(joinRequests.createdAt));
-	return { requests: rows };
-});
+export const getJoinRequests = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const { learningCircles } = await import(
+			"@quran/db/tables/learning-circle.drizzle"
+		);
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		const rows = await db
+			.select({
+				id: joinRequests.id,
+				status: joinRequests.status,
+				requestedRole: joinRequests.requestedRole,
+				circleTitle: learningCircles.title,
+				userName: userTable.name,
+				userEmail: userTable.email,
+			})
+			.from(joinRequests)
+			.innerJoin(learningCircles, eq(joinRequests.circleId, learningCircles.id))
+			.innerJoin(userTable, eq(joinRequests.userId, userTable.id))
+			.where(
+				and(
+					eq(learningCircles.ownerTeacherId, u.id),
+					eq(joinRequests.status, "pending"),
+				),
+			)
+			.orderBy(desc(joinRequests.createdAt));
+		return { requests: rows };
+	},
+);
 
 export const respondJoinRequest = createServerFn({ method: "POST" })
-	.validator(z.object({ id: z.string().uuid(), status: z.enum(["approved", "rejected"]) }))
+	.validator(
+		z.object({
+			id: z.string().uuid(),
+			status: z.enum(["approved", "rejected"]),
+		}),
+	)
 	.handler(async ({ data }) => {
 		await requireUser();
-		const { circleMemberships } = await import("@quran/db/tables/circle-membership.drizzle");
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
 		const [req] = await db
 			.update(joinRequests)
 			.set({ status: data.status })
@@ -173,8 +229,12 @@ export const getStudentDetail = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		await requireUser();
 		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
-		const { sessionRecords } = await import("@quran/db/tables/session-record.drizzle");
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
+		const { sessionRecords } = await import(
+			"@quran/db/tables/session-record.drizzle"
+		);
 		const [student] = await db
 			.select({
 				id: userTable.id,
@@ -189,7 +249,12 @@ export const getStudentDetail = createServerFn({ method: "GET" })
 		const [plan] = await db
 			.select()
 			.from(reviewPlans)
-			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)))
+			.where(
+				and(
+					eq(reviewPlans.studentId, data.studentId),
+					eq(reviewPlans.isActive, true),
+				),
+			)
 			.limit(1);
 		const reviewRows = await db
 			.select({
@@ -216,7 +281,12 @@ export const getStudentDetail = createServerFn({ method: "GET" })
 			.from(sessionRecords)
 			.where(eq(sessionRecords.studentId, data.studentId))
 			.orderBy(sessionRecords.sessionDate);
-		return { student: student ?? null, plan: plan ?? null, reviews: reviewRows, sessions: sessionRows };
+		return {
+			student: student ?? null,
+			plan: plan ?? null,
+			reviews: reviewRows,
+			sessions: sessionRows,
+		};
 	});
 
 /** Teacher: deactivate a student's active review plan. */
@@ -224,50 +294,61 @@ export const removeReviewPlan = createServerFn({ method: "POST" })
 	.validator(z.object({ studentId: z.string() }))
 	.handler(async ({ data }) => {
 		await requireUser();
-		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
 		await db
 			.update(reviewPlans)
 			.set({ isActive: false })
-			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)));
+			.where(
+				and(
+					eq(reviewPlans.studentId, data.studentId),
+					eq(reviewPlans.isActive, true),
+				),
+			);
 		return { ok: true };
 	});
 
 /** Current student's reviews + sessions for the progress screen. */
-export const getStudentProgress = createServerFn({ method: "GET" }).handler(async () => {
-	const u = await requireUser();
-	const { sessionRecords } = await import("@quran/db/tables/session-record.drizzle");
-	const reviewRows = await db
-		.select({
-			id: reviews.id,
-			surahName: reviews.surahName,
-			verseFrom: reviews.verseFrom,
-			verseTo: reviews.verseTo,
-			assignedDate: reviews.assignedDate,
-			status: reviews.status,
-			pointsEarned: reviews.pointsEarned,
-		})
-		.from(reviews)
-		.where(eq(reviews.studentId, u.id))
-		.orderBy(reviews.assignedDate);
-	const sessionRows = await db
-		.select({
-			id: sessionRecords.id,
-			memorizedSurah: sessionRecords.memorizedSurah,
-			memorizedVerseFrom: sessionRecords.memorizedVerseFrom,
-			memorizedVerseTo: sessionRecords.memorizedVerseTo,
-			sessionDate: sessionRecords.sessionDate,
-			evaluation: sessionRecords.evaluation,
-		})
-		.from(sessionRecords)
-		.where(eq(sessionRecords.studentId, u.id))
-		.orderBy(sessionRecords.sessionDate);
-	return {
-		reviews: reviewRows,
-		sessions: sessionRows,
-		streak: u.streak,
-		points: u.points,
-	};
-});
+export const getStudentProgress = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const { sessionRecords } = await import(
+			"@quran/db/tables/session-record.drizzle"
+		);
+		const reviewRows = await db
+			.select({
+				id: reviews.id,
+				surahName: reviews.surahName,
+				verseFrom: reviews.verseFrom,
+				verseTo: reviews.verseTo,
+				assignedDate: reviews.assignedDate,
+				status: reviews.status,
+				pointsEarned: reviews.pointsEarned,
+			})
+			.from(reviews)
+			.where(eq(reviews.studentId, u.id))
+			.orderBy(reviews.assignedDate);
+		const sessionRows = await db
+			.select({
+				id: sessionRecords.id,
+				memorizedSurah: sessionRecords.memorizedSurah,
+				memorizedVerseFrom: sessionRecords.memorizedVerseFrom,
+				memorizedVerseTo: sessionRecords.memorizedVerseTo,
+				sessionDate: sessionRecords.sessionDate,
+				evaluation: sessionRecords.evaluation,
+			})
+			.from(sessionRecords)
+			.where(eq(sessionRecords.studentId, u.id))
+			.orderBy(sessionRecords.sessionDate);
+		return {
+			reviews: reviewRows,
+			sessions: sessionRows,
+			streak: u.streak,
+			points: u.points,
+		};
+	},
+);
 
 // ── Review modals (assign-review, add-session, submit-review) ──
 
@@ -285,7 +366,9 @@ export const getStudentModalData = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		await requireUser();
 		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
 		const [student] = await db
 			.select({ id: userTable.id, name: userTable.name })
 			.from(userTable)
@@ -294,21 +377,39 @@ export const getStudentModalData = createServerFn({ method: "GET" })
 		const [plan] = await db
 			.select()
 			.from(reviewPlans)
-			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)))
+			.where(
+				and(
+					eq(reviewPlans.studentId, data.studentId),
+					eq(reviewPlans.isActive, true),
+				),
+			)
 			.limit(1);
 		return { student: student ?? null, plan: plan ?? null };
 	});
 
 /** Teacher: create or update the student's active review plan. */
 export const assignReviewPlan = createServerFn({ method: "POST" })
-	.validator(z.object({ studentId: z.string(), dailyAmount: z.number().int().min(1), ...rangeFields }))
+	.validator(
+		z.object({
+			studentId: z.string(),
+			dailyAmount: z.number().int().min(1),
+			...rangeFields,
+		}),
+	)
 	.handler(async ({ data }) => {
 		const teacher = await requireUser();
-		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
 		const existing = await db
 			.select({ id: reviewPlans.id })
 			.from(reviewPlans)
-			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)))
+			.where(
+				and(
+					eq(reviewPlans.studentId, data.studentId),
+					eq(reviewPlans.isActive, true),
+				),
+			)
 			.limit(1);
 		const values = {
 			studentId: data.studentId,
@@ -323,7 +424,10 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			isActive: true,
 		};
 		if (existing[0]) {
-			await db.update(reviewPlans).set(values).where(eq(reviewPlans.id, existing[0].id));
+			await db
+				.update(reviewPlans)
+				.set(values)
+				.where(eq(reviewPlans.id, existing[0].id));
 			return { ok: true, updated: true };
 		}
 		await db.insert(reviewPlans).values(values);
@@ -345,7 +449,9 @@ export const createSession = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const teacher = await requireUser();
 		const { getSurahName } = await import("@quran/db/domain/surahs");
-		const { sessionRecords } = await import("@quran/db/tables/session-record.drizzle");
+		const { sessionRecords } = await import(
+			"@quran/db/tables/session-record.drizzle"
+		);
 		await db.insert(sessionRecords).values({
 			studentId: data.studentId,
 			teacherId: teacher.id,
@@ -383,8 +489,12 @@ export const submitReview = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const u = await requireUser();
 		const { getSurahName } = await import("@quran/db/domain/surahs");
-		const { calculatePoints, nextStreak, applyPoints } = await import("@quran/db/domain/scoring");
-		const { reviewSubmissions } = await import("@quran/db/tables/review-submission.drizzle");
+		const { calculatePoints, nextStreak, applyPoints } = await import(
+			"@quran/db/domain/scoring"
+		);
+		const { reviewSubmissions } = await import(
+			"@quran/db/tables/review-submission.drizzle"
+		);
 		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
 
 		const [review] = await db
@@ -410,10 +520,18 @@ export const submitReview = createServerFn({ method: "POST" })
 		if (review.status !== "completed") {
 			await db
 				.update(reviews)
-				.set({ status: "completed", completedAt: new Date(), pointsEarned: earned })
+				.set({
+					status: "completed",
+					completedAt: new Date(),
+					pointsEarned: earned,
+				})
 				.where(eq(reviews.id, review.id));
 			const newPoints = applyPoints(u.points, earned);
-			const newStreak = nextStreak(u.streak, (u as { streakLastDate?: string | null }).streakLastDate ?? null, todayStr);
+			const newStreak = nextStreak(
+				u.streak,
+				(u as { streakLastDate?: string | null }).streakLastDate ?? null,
+				todayStr,
+			);
 			await db
 				.update(userTable)
 				.set({ points: newPoints, streak: newStreak, streakLastDate: todayStr })

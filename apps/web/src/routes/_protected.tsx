@@ -1,7 +1,7 @@
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { registerNativePush } from "@/lib/native-push";
 import { getSession } from "@/server/session";
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
-import { useEffect } from "react";
 
 /** Layout guard — every route nested under `_protected` requires a session. */
 export const Route = createFileRoute("/_protected")({

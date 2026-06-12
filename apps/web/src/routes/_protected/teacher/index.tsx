@@ -1,8 +1,8 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { CalendarPlus, ClipboardList, Users } from "lucide-react";
 import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { getTeacherHome } from "@/server/queries";
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { CalendarPlus, ClipboardList, Users } from "lucide-react";
 
 export const Route = createFileRoute("/_protected/teacher/")({
 	loader: async () => getTeacherHome(),
@@ -33,7 +33,9 @@ function TeacherHome() {
 							</span>
 						</div>
 						{c.description ? (
-							<span className="text-[13px] text-text-secondary">{c.description}</span>
+							<span className="text-[13px] text-text-secondary">
+								{c.description}
+							</span>
 						) : null}
 						<span className="flex items-center gap-1 text-[12px] text-text-light">
 							<Users size={14} /> {c.studentsCount} {t("teacher.members")}
@@ -41,7 +43,10 @@ function TeacherHome() {
 						{c.students.length > 0 ? (
 							<div className="flex flex-col divide-y divide-border border-t border-border">
 								{c.students.map((s) => (
-									<div key={s.id} className="flex items-center justify-between gap-2 py-2">
+									<div
+										key={s.id}
+										className="flex items-center justify-between gap-2 py-2"
+									>
 										<Link
 											to="/student-detail"
 											search={{ studentId: s.id }}

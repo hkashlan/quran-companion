@@ -1,10 +1,10 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Lock, Mail } from "lucide-react";
+import { useState } from "react";
 import { AuthShell, OtpInput } from "@/components/auth-ui";
 import { Button, TextInput } from "@/components/ui";
 import { emailOtp, signIn } from "@/lib/auth-client";
 import { useI18n } from "@/lib/i18n";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Lock, Mail } from "lucide-react";
-import { useState } from "react";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
@@ -25,7 +25,7 @@ function LoginPage() {
 		const { data, error } = await signIn.email({ email, password });
 		setLoading(false);
 		if (error) return setError(error.message ?? "Login failed");
-		if (data && data.user && !data.user.emailVerified) {
+		if (data?.user && !data.user.emailVerified) {
 			await emailOtp.sendVerificationOtp({ email, type: "email-verification" });
 			setNeedsConfirm(true);
 			return;
@@ -45,7 +45,10 @@ function LoginPage() {
 
 	if (needsConfirm) {
 		return (
-			<AuthShell title={t("auth.confirmTitle")} subtitle={t("auth.confirmHint")}>
+			<AuthShell
+				title={t("auth.confirmTitle")}
+				subtitle={t("auth.confirmHint")}
+			>
 				<form onSubmit={onConfirm} className="flex flex-col gap-3">
 					<OtpInput value={otp} onChange={setOtp} />
 					{error ? <p className="text-[13px] text-error">{error}</p> : null}
@@ -54,7 +57,12 @@ function LoginPage() {
 					</Button>
 					<button
 						type="button"
-						onClick={() => emailOtp.sendVerificationOtp({ email, type: "email-verification" })}
+						onClick={() =>
+							emailOtp.sendVerificationOtp({
+								email,
+								type: "email-verification",
+							})
+						}
 						className="text-[13px] font-semibold text-primary"
 					>
 						{t("auth.resend")}
@@ -83,7 +91,10 @@ function LoginPage() {
 					onChange={(e) => setPassword(e.target.value)}
 					required
 				/>
-				<Link to="/forgot-password" className="text-end text-[13px] font-semibold text-primary">
+				<Link
+					to="/forgot-password"
+					className="text-end text-[13px] font-semibold text-primary"
+				>
 					{t("auth.forgot")}
 				</Link>
 				{error ? <p className="text-[13px] text-error">{error}</p> : null}

@@ -7,7 +7,9 @@ import { subscribeNativePush } from "@/server/subscribe-push";
  * Dynamically imports the Capacitor plugins so the web bundle never pulls them
  * in; they only resolve inside the native runtime.
  */
-export async function registerNativePush(): Promise<"registered" | "web" | "denied" | "error"> {
+export async function registerNativePush(): Promise<
+	"registered" | "web" | "denied" | "error"
+> {
 	try {
 		const { Capacitor } = await import("@capacitor/core");
 		if (!Capacitor.isNativePlatform()) return "web";

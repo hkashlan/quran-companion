@@ -1,12 +1,14 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { KeyRound, Lock, Mail } from "lucide-react";
+import { useState } from "react";
 import { AuthShell, OtpInput } from "@/components/auth-ui";
 import { Button, TextInput } from "@/components/ui";
 import { emailOtp, forgetPassword } from "@/lib/auth-client";
 import { useI18n } from "@/lib/i18n";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { KeyRound, Lock, Mail } from "lucide-react";
-import { useState } from "react";
 
-export const Route = createFileRoute("/forgot-password")({ component: ForgotPassword });
+export const Route = createFileRoute("/forgot-password")({
+	component: ForgotPassword,
+});
 
 function ForgotPassword() {
 	const { t } = useI18n();
@@ -32,7 +34,11 @@ function ForgotPassword() {
 		e.preventDefault();
 		setLoading(true);
 		setError(null);
-		const { error } = await emailOtp.resetPassword({ email, otp, password: newPassword });
+		const { error } = await emailOtp.resetPassword({
+			email,
+			otp,
+			password: newPassword,
+		});
 		setLoading(false);
 		if (error) return setError(error.message ?? "Invalid code");
 		setStage("done");
@@ -51,7 +57,14 @@ function ForgotPassword() {
 				</p>
 			) : stage === "email" ? (
 				<form onSubmit={sendCode} className="flex flex-col gap-3">
-					<TextInput icon={<Mail size={20} />} type="email" placeholder={t("auth.email")} value={email} onChange={(e) => setEmail(e.target.value)} required />
+					<TextInput
+						icon={<Mail size={20} />}
+						type="email"
+						placeholder={t("auth.email")}
+						value={email}
+						onChange={(e) => setEmail(e.target.value)}
+						required
+					/>
 					{error ? <p className="text-[13px] text-error">{error}</p> : null}
 					<Button type="submit" loading={loading}>
 						{t("auth.sendReset")}
@@ -60,14 +73,24 @@ function ForgotPassword() {
 			) : (
 				<form onSubmit={reset} className="flex flex-col gap-3">
 					<OtpInput value={otp} onChange={setOtp} />
-					<TextInput icon={<Lock size={20} />} type="password" placeholder={t("auth.newPassword")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+					<TextInput
+						icon={<Lock size={20} />}
+						type="password"
+						placeholder={t("auth.newPassword")}
+						value={newPassword}
+						onChange={(e) => setNewPassword(e.target.value)}
+						required
+					/>
 					{error ? <p className="text-[13px] text-error">{error}</p> : null}
 					<Button type="submit" loading={loading}>
 						{t("auth.resetPassword")}
 					</Button>
 				</form>
 			)}
-			<Link to="/login" className="text-center text-[13px] font-semibold text-text-secondary underline">
+			<Link
+				to="/login"
+				className="text-center text-[13px] font-semibold text-text-secondary underline"
+			>
 				{t("auth.backToLogin")}
 			</Link>
 		</AuthShell>

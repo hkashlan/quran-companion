@@ -1,10 +1,10 @@
-import { auth } from "@/lib/auth";
 import { db } from "@quran/db/db";
 import { pushTokens } from "@quran/db/tables/push-token.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { auth } from "@/lib/auth";
 
 const subscriptionSchema = z.object({
 	endpoint: z.string().url(),
@@ -67,7 +67,12 @@ export const subscribeNativePush = createServerFn({ method: "POST" })
 		const existing = await db
 			.select()
 			.from(pushTokens)
-			.where(and(eq(pushTokens.userId, session.user.id), eq(pushTokens.token, data.token)))
+			.where(
+				and(
+					eq(pushTokens.userId, session.user.id),
+					eq(pushTokens.token, data.token),
+				),
+			)
 			.limit(1);
 		if (existing[0]) {
 			await db

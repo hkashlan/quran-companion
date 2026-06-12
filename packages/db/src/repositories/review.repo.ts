@@ -19,7 +19,9 @@ export async function listReviewsByDate(studentId: string, date: string) {
 	return db
 		.select()
 		.from(reviews)
-		.where(and(eq(reviews.studentId, studentId), eq(reviews.assignedDate, date)));
+		.where(
+			and(eq(reviews.studentId, studentId), eq(reviews.assignedDate, date)),
+		);
 }
 
 /** Pending reviews whose assigned date is in [from, to] — for "undone" lists. */
@@ -43,7 +45,11 @@ export async function listPendingReviews(
 }
 
 export async function getReviewById(id: string) {
-	const rows = await db.select().from(reviews).where(eq(reviews.id, id)).limit(1);
+	const rows = await db
+		.select()
+		.from(reviews)
+		.where(eq(reviews.id, id))
+		.limit(1);
 	return rows[0] ?? null;
 }
 

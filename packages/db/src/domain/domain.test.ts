@@ -7,7 +7,12 @@ import {
 	nextReviewWindow,
 	nextStartPosition,
 } from "./review-cycle.ts";
-import { applyPoints, calculatePoints, isConsecutive, nextStreak } from "./scoring.ts";
+import {
+	applyPoints,
+	calculatePoints,
+	isConsecutive,
+	nextStreak,
+} from "./scoring.ts";
 
 describe("scoring.calculatePoints", () => {
 	it("awards 10 on time, 5 one day late, 0 two days late", () => {
@@ -44,25 +49,39 @@ describe("scoring.nextStreak / applyPoints / isConsecutive", () => {
 
 describe("review-cycle verse math", () => {
 	it("compares and advances positions, rolling surahs", () => {
-		expect(comparePositions({ surah: 1, verse: 7 }, { surah: 2, verse: 1 })).toBe(-1);
+		expect(
+			comparePositions({ surah: 1, verse: 7 }, { surah: 2, verse: 1 }),
+		).toBe(-1);
 		// Al-Fatiha has 7 verses → next after 1:7 is 2:1
-		expect(nextPosition({ surah: 1, verse: 7 })).toEqual({ surah: 2, verse: 1 });
-		expect(nextPosition({ surah: 1, verse: 3 })).toEqual({ surah: 1, verse: 4 });
+		expect(nextPosition({ surah: 1, verse: 7 })).toEqual({
+			surah: 2,
+			verse: 1,
+		});
+		expect(nextPosition({ surah: 1, verse: 3 })).toEqual({
+			surah: 1,
+			verse: 4,
+		});
 	});
 
 	it("advanceWithinPlan walks N verses, clamped to plan end", () => {
 		// start 1:1, 5 verses → 1:5
-		expect(advanceWithinPlan({ surah: 1, verse: 1 }, 5, { surah: 2, verse: 100 })).toEqual({
+		expect(
+			advanceWithinPlan({ surah: 1, verse: 1 }, 5, { surah: 2, verse: 100 }),
+		).toEqual({
 			surah: 1,
 			verse: 5,
 		});
 		// crossing surah boundary: 1:1 + 10 verses → 1:7 then 2:1,2,3 → 2:3
-		expect(advanceWithinPlan({ surah: 1, verse: 1 }, 10, { surah: 2, verse: 286 })).toEqual({
+		expect(
+			advanceWithinPlan({ surah: 1, verse: 1 }, 10, { surah: 2, verse: 286 }),
+		).toEqual({
 			surah: 2,
 			verse: 3,
 		});
 		// clamp at plan end
-		expect(advanceWithinPlan({ surah: 1, verse: 5 }, 100, { surah: 1, verse: 7 })).toEqual({
+		expect(
+			advanceWithinPlan({ surah: 1, verse: 5 }, 100, { surah: 1, verse: 7 }),
+		).toEqual({
 			surah: 1,
 			verse: 7,
 		});

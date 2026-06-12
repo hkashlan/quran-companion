@@ -16,7 +16,9 @@ export function BottomTabBar({ tabs }: { tabs: Tab[] }) {
 				<Link
 					key={tab.to}
 					to={tab.to}
-					activeOptions={{ exact: tab.to.endsWith("/student") || tab.to.endsWith("/teacher") }}
+					activeOptions={{
+						exact: tab.to.endsWith("/student") || tab.to.endsWith("/teacher"),
+					}}
 					className="relative flex flex-1 flex-col items-center justify-center gap-0.5 text-text-light [&.active]:text-primary"
 				>
 					<span className="relative">

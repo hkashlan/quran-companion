@@ -1,5 +1,5 @@
-import { getSession } from "@/server/session";
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { getSession } from "@/server/session";
 
 /** Auth gate: signed-out → /login; signed-in → role-appropriate home. */
 export const Route = createFileRoute("/")({

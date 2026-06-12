@@ -39,10 +39,15 @@ function html(otp: string, type: OtpType): string {
 }
 
 /** Returns true if an email was actually dispatched via Resend. */
-export async function sendOtpEmail(email: string, otp: string, type: string): Promise<boolean> {
+export async function sendOtpEmail(
+	email: string,
+	otp: string,
+	type: string,
+): Promise<boolean> {
 	const r = resend();
 	if (!r) return false;
-	const t = (type as OtpType) in SUBJECTS ? (type as OtpType) : "email-verification";
+	const t =
+		(type as OtpType) in SUBJECTS ? (type as OtpType) : "email-verification";
 	await r.emails.send({
 		from: process.env.EMAIL_FROM ?? "Quran Companion <onboarding@resend.dev>",
 		to: email,

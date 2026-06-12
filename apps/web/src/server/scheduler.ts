@@ -1,10 +1,10 @@
 import { db } from "@quran/db/db";
-import { getSurahName } from "@quran/db/domain/surahs";
 import { nextReviewWindow } from "@quran/db/domain/review-cycle";
+import { getSurahName } from "@quran/db/domain/surahs";
 import { user } from "@quran/db/tables/auth.drizzle";
 import { notificationDeliveries } from "@quran/db/tables/notification-delivery.drizzle";
-import { reviewPlans } from "@quran/db/tables/review-plan.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
+import { reviewPlans } from "@quran/db/tables/review-plan.drizzle";
 import { and, desc, eq, lt } from "drizzle-orm";
 
 import { sendPush } from "./push.ts";
@@ -60,7 +60,9 @@ export async function runDailyScheduler(today: string) {
 		const existingToday = await db
 			.select({ id: reviews.id })
 			.from(reviews)
-			.where(and(eq(reviews.reviewPlanId, plan.id), eq(reviews.assignedDate, today)))
+			.where(
+				and(eq(reviews.reviewPlanId, plan.id), eq(reviews.assignedDate, today)),
+			)
 			.limit(1);
 		if (existingToday.length > 0) continue;
 
@@ -117,6 +119,9 @@ export async function runDailyScheduler(today: string) {
 
 /** Convenience: list students with notifications enabled (has any active push token). */
 export async function activeStudentCount(): Promise<number> {
-	const rows = await db.select({ id: user.id }).from(user).where(eq(user.role, "student"));
+	const rows = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(eq(user.role, "student"));
 	return rows.length;
 }

@@ -56,10 +56,14 @@ export async function sendPush(userId: string, message: PushMessage) {
 		}
 
 		// ── Web Push (VAPID) ──
-		if (sub.kind !== "webpush" || !sub.endpoint || !sub.p256dh || !sub.auth) continue;
+		if (sub.kind !== "webpush" || !sub.endpoint || !sub.p256dh || !sub.auth)
+			continue;
 		try {
 			await webpush.sendNotification(
-				{ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+				{
+					endpoint: sub.endpoint,
+					keys: { p256dh: sub.p256dh, auth: sub.auth },
+				},
 				payload,
 			);
 			sent++;

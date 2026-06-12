@@ -36,7 +36,9 @@ export const reviews = pgTable(
 		endSurahNumber: integer("end_surah_number"),
 		endSurahName: text("end_surah_name"),
 		verseTo: integer("verse_to").notNull(),
-		rangeMode: varchar("range_mode", { length: 10 }).default("verses").notNull(),
+		rangeMode: varchar("range_mode", { length: 10 })
+			.default("verses")
+			.notNull(),
 		startPage: integer("start_page"),
 		endPage: integer("end_page"),
 		assignedDate: date("assigned_date").notNull(),

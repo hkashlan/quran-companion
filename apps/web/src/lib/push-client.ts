@@ -19,7 +19,11 @@ export type PushResult = "subscribed" | "denied" | "unsupported" | "no-vapid";
  * handler. Returns a status the UI can surface.
  */
 export async function enablePush(): Promise<PushResult> {
-	if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+	if (
+		typeof window === "undefined" ||
+		!("serviceWorker" in navigator) ||
+		!("PushManager" in window)
+	) {
 		return "unsupported";
 	}
 	const { key } = await getVapidPublicKey();
@@ -39,8 +43,12 @@ export async function enablePush(): Promise<PushResult> {
 			applicationServerKey: urlBase64ToUint8Array(key),
 		}));
 
-	const json = sub.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
-	if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return "unsupported";
+	const json = sub.toJSON() as {
+		endpoint?: string;
+		keys?: { p256dh?: string; auth?: string };
+	};
+	if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth)
+		return "unsupported";
 
 	await subscribePush({
 		data: {

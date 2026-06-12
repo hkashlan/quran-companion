@@ -27,7 +27,9 @@ export const sessionRecords = pgTable(
 		endSurahNumber: integer("end_surah_number"),
 		endSurahName: text("end_surah_name"),
 		memorizedVerseTo: integer("memorized_verse_to").notNull(),
-		rangeMode: varchar("range_mode", { length: 10 }).default("verses").notNull(),
+		rangeMode: varchar("range_mode", { length: 10 })
+			.default("verses")
+			.notNull(),
 		startPage: integer("start_page"),
 		endPage: integer("end_page"),
 		sessionDate: date("session_date").notNull(),

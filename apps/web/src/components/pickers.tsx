@@ -104,6 +104,7 @@ export function Segmented<T extends string>({
 		<div className="flex gap-2">
 			{options.map((o) => (
 				<button
+					type="button"
 					key={o.value}
 					onClick={() => onChange(o.value)}
 					className={`flex-1 rounded-md border py-2.5 text-[14px] font-semibold ${

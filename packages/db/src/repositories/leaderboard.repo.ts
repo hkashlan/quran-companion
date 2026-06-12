@@ -31,7 +31,12 @@ export async function getLeaderboard(
 ): Promise<LeaderboardEntry[]> {
 	if (period === "overall") {
 		const rows = await db
-			.select({ id: user.id, name: user.name, points: user.points, streak: user.streak })
+			.select({
+				id: user.id,
+				name: user.name,
+				points: user.points,
+				streak: user.streak,
+			})
 			.from(user)
 			.where(eq(user.role, "student"))
 			.orderBy(desc(user.points), user.name);

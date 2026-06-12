@@ -15,7 +15,10 @@ export function diffDays(a: string, b: string): number {
  * 10 (on time), 5 (1 day late), 0 (2 days late), then -5 per extra day.
  * Mirrors scoring.py::calculate_points. Returns [points, diffDays].
  */
-export function calculatePoints(assignedDate: string, today: string): [number, number] {
+export function calculatePoints(
+	assignedDate: string,
+	today: string,
+): [number, number] {
 	const d = diffDays(today, assignedDate);
 	let points: number;
 	if (d <= 0) points = 10;
@@ -26,7 +29,10 @@ export function calculatePoints(assignedDate: string, today: string): [number, n
 }
 
 /** Whether a completion keeps the streak alive (scoring.py::is_consecutive). */
-export function isConsecutive(streakLastDate: string | null, d: number): boolean {
+export function isConsecutive(
+	streakLastDate: string | null,
+	d: number,
+): boolean {
 	return streakLastDate !== null && d <= 1;
 }
 
@@ -42,7 +48,10 @@ export function nextStreak(
 	completedDate: string,
 ): number {
 	if (streakLastDate === completedDate) return currentStreak;
-	if (streakLastDate !== null && diffDays(completedDate, streakLastDate) === 1) {
+	if (
+		streakLastDate !== null &&
+		diffDays(completedDate, streakLastDate) === 1
+	) {
 		return currentStreak + 1;
 	}
 	return 1;

@@ -58,18 +58,34 @@ export type PlanLike = {
 	dailyAmount: number;
 };
 
-export type LastReviewEnd = { endSurahNumber: number | null; surahNumber: number; verseTo: number } | null;
+export type LastReviewEnd = {
+	endSurahNumber: number | null;
+	surahNumber: number;
+	verseTo: number;
+} | null;
 
 /**
  * Where the next review starts, wrapping back to the plan start when the
  * previous review reached (or passed) the plan end (review_cycles.py::_next_start_position).
  */
-export function nextStartPosition(plan: PlanLike, prev: LastReviewEnd): VersePosition {
-	const planStart: VersePosition = { surah: plan.startSurahNumber, verse: plan.startVerse };
-	const planEnd: VersePosition = { surah: plan.endSurahNumber, verse: plan.endVerse };
+export function nextStartPosition(
+	plan: PlanLike,
+	prev: LastReviewEnd,
+): VersePosition {
+	const planStart: VersePosition = {
+		surah: plan.startSurahNumber,
+		verse: plan.startVerse,
+	};
+	const planEnd: VersePosition = {
+		surah: plan.endSurahNumber,
+		verse: plan.endVerse,
+	};
 	if (prev === null) return planStart;
 
-	const prevEnd: VersePosition = { surah: prev.endSurahNumber ?? prev.surahNumber, verse: prev.verseTo };
+	const prevEnd: VersePosition = {
+		surah: prev.endSurahNumber ?? prev.surahNumber,
+		verse: prev.verseTo,
+	};
 	if (comparePositions(prevEnd, planEnd) >= 0) return planStart;
 
 	const candidate = nextPosition(prevEnd);
@@ -86,10 +102,9 @@ export function nextReviewWindow(
 	prev: LastReviewEnd,
 ): { start: VersePosition; end: VersePosition } {
 	const start = nextStartPosition(plan, prev);
-	const end = advanceWithinPlan(
-		start,
-		Math.max(1, plan.dailyAmount),
-		{ surah: plan.endSurahNumber, verse: plan.endVerse },
-	);
+	const end = advanceWithinPlan(start, Math.max(1, plan.dailyAmount), {
+		surah: plan.endSurahNumber,
+		verse: plan.endVerse,
+	});
 	return { start, end };
 }
