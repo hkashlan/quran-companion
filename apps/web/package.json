@@ -12,6 +12,9 @@
     "auth:generate": "pnpm dlx @better-auth/cli generate --config ./src/lib/auth.ts --output ../../packages/db/src/tables/auth.drizzle.ts"
   },
   "dependencies": {
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/push-notifications": "^8.1.1",
+    "@capgo/capacitor-updater": "^8.49.1",
     "@quran/db": "workspace:*",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -20,6 +23,7 @@
     "@tanstack/react-start": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
+    "google-auth-library": "^9.15.1",
     "lucide-react": "catalog:",
     "nitro": "catalog:",
     "react": "catalog:",
@@ -30,6 +34,9 @@
   },
   "devDependencies": {
     "@better-auth/drizzle-adapter": "catalog:",
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
     "@inlang/paraglide-js": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/router-plugin": "catalog:",

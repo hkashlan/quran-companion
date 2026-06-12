@@ -90,6 +90,8 @@ async function main() {
 	const aliId = await createUser("ali@test.com", "علي حسن", "student");
 	const saraId = await createUser("sara@test.com", "سارة محمد", "student");
 	const omarId = await createUser("omar@test.com", "عمر خالد", "student");
+	// Pre-confirm the demo accounts so they log in without the OTP step.
+	await db.update(userTable).set({ emailVerified: true });
 	const students = [
 		{ id: aliId, name: "علي حسن" },
 		{ id: saraId, name: "سارة محمد" },

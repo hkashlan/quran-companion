@@ -1,35 +1,28 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
- * Capacitor wrapper config (Phase 5). The native shells are added with
+ * Capacitor wrapper config. The native shells are added with
  * `npx cap add android` / `npx cap add ios` (those folders are gitignored).
  *
- * Two ways to run:
- *  - Bundled: point `webDir` at the built PWA (`vite build` → `.output/public`)
- *    and `npx cap copy`.
- *  - Live (recommended for the Vercel-hosted PWA + OTA): set `server.url` to the
- *    deployed origin so the shell loads the latest web build, and use Capgo for
- *    OTA of the bundled fallback.
+ * Recommended: LIVE mode — set CAPACITOR_SERVER_URL to the deployed PWA origin
+ * before `npx cap sync`, so the shell loads the latest web build (and Capgo
+ * pushes OTA bundles). Without it, the bundled `capacitor-www` shell is shown.
  *
  * See docs/CAPACITOR.md for the full runbook.
  */
+const serverUrl = process.env.CAPACITOR_SERVER_URL;
+
 const config: CapacitorConfig = {
 	appId: "com.hkashlan.qurancompanion",
 	appName: "Quran Companion",
-	webDir: ".output/public",
+	webDir: "capacitor-www",
 	server: {
-		// For live mode, set this to your Vercel URL (or comment out for bundled):
-		// url: "https://quran-companion.vercel.app",
+		...(serverUrl ? { url: serverUrl } : {}),
 		androidScheme: "https",
 	},
 	plugins: {
-		// Capgo OTA live updates (free tier). Token + setup in docs/CAPACITOR.md.
-		CapacitorUpdater: {
-			autoUpdate: true,
-		},
-		PushNotifications: {
-			presentationOptions: ["badge", "sound", "alert"],
-		},
+		CapacitorUpdater: { autoUpdate: true },
+		PushNotifications: { presentationOptions: ["badge", "sound", "alert"] },
 	},
 };
 

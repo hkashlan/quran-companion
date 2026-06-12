@@ -71,4 +71,6 @@ query param if you prefer — Vercel cron supports custom headers on Pro.)
       change-password, forgot-password
 - [x] Email provider wiring (Resend) for confirm/reset — set `RESEND_API_KEY` +
       `EMAIL_FROM`; without a key it falls back to logging the OTP (dev)
-- [ ] Native (Capacitor) — see CAPACITOR.md
+- [x] Native push send branch (FCM HTTP v1) — `src/server/fcm.ts` (set `FCM_*`)
+- [~] Native (Capacitor) — Android APK + iOS sim builds verified; needs deploy URL
+      + Firebase + store accounts. See CAPACITOR.md

@@ -1,11 +1,29 @@
 # Phase 5 — Capacitor native wrapper + Capgo OTA + native push
 
-The web app is the source of truth; Capacitor wraps the built PWA into Android/iOS
-shells. OTA updates use **Capgo** (free tier); native push uses **FCM/APNs**, stored
-in the same `push_tokens` table (`kind = "fcm" | "apns"`).
+The web app is the source of truth; Capacitor wraps the PWA into Android/iOS shells.
+OTA updates use **Capgo** (free tier); native push uses **FCM**, stored in the same
+`push_tokens` table (`kind = "fcm" | "apns"`).
 
-> Needs your accounts: Apple Developer, Google Play, a Capgo account, and a Firebase
-> project for FCM. Everything below is the runbook; nothing here requires me.
+## Status (done in-repo)
+
+- ✅ Capacitor deps installed (`@capacitor/core`, cli, android, ios,
+  push-notifications, `@capgo/capacitor-updater`)
+- ✅ `capacitor.config.ts` + static `capacitor-www/` shell (live-mode webDir)
+- ✅ Native client `src/lib/native-push.ts` (registers FCM token →
+  `subscribeNativePush`), wired into the protected layout
+- ✅ Server FCM send branch (`src/server/fcm.ts`, used by `sendPush`)
+- ✅ **Verified building locally:** `npx cap add android` → Gradle
+  `assembleDebug` produced `app-debug.apk` (7.7 MB); `npx cap add ios` → Xcode
+  **simulator build succeeded**
+- ⏳ Native projects (`android/`, `ios/`) are gitignored — regenerate with the
+  commands below, or un-ignore them to persist native customizations
+
+## What still needs your accounts
+
+- A deployed PWA URL (set `CAPACITOR_SERVER_URL` for live mode)
+- A Firebase project for FCM (`google-services.json` / `GoogleService-Info.plist`
+  + `FCM_*` env on the server)
+- A Capgo account/token for OTA; Apple Developer + Google Play for store builds + signing
 
 ## 1. Install Capacitor (from `apps/web`)
 
