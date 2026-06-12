@@ -1,104 +1,82 @@
 /**
- * Headless-Chrome smoke test (puppeteer-core + system Chrome). Verifies the
- * running dev server end-to-end: pages render, no console/page errors, and the
- * login flow reaches the protected home. Screenshots land in /tmp/quran-verify.
+ * Headless-Chrome smoke test (puppeteer-core + system Chrome). Logs in as a
+ * student and a teacher, walks every tab, screenshots each, and reports any
+ * console / page errors. Screenshots land in /tmp/quran-verify.
  *
  * Run:  pnpm --filter @quran/web verify   (server must be up on :3000)
  */
 import { mkdirSync } from "node:fs";
-import puppeteer, { type ConsoleMessage, type HTTPRequest } from "puppeteer-core";
+import puppeteer, { type ConsoleMessage, type HTTPRequest, type Page } from "puppeteer-core";
 
-const CHROME =
-	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = "http://localhost:3000";
 const OUT = "/tmp/quran-verify";
 mkdirSync(OUT, { recursive: true });
 
-type Problem = { kind: string; detail: string };
-const problems: Problem[] = [];
+const problems: { kind: string; detail: string }[] = [];
+const results: string[] = [];
 
-function attach(page: import("puppeteer-core").Page, label: string) {
-	page.on("console", (msg: ConsoleMessage) => {
-		if (msg.type() === "error") {
-			problems.push({ kind: `console.error@${label}`, detail: msg.text() });
-		}
+function attach(page: Page, label: string) {
+	page.on("console", (m: ConsoleMessage) => {
+		if (m.type() === "error") problems.push({ kind: `console@${label}`, detail: m.text() });
 	});
-	page.on("pageerror", (err: Error) => {
-		problems.push({ kind: `pageerror@${label}`, detail: err.message });
+	page.on("pageerror", (e: Error) => problems.push({ kind: `pageerror@${label}`, detail: e.message }));
+	page.on("requestfailed", (r: HTTPRequest) => {
+		const u = r.url();
+		if (u.includes("/icons/") || u.includes("favicon")) return;
+		problems.push({ kind: `reqfail@${label}`, detail: `${u} — ${r.failure()?.errorText}` });
 	});
-	page.on("requestfailed", (req: HTTPRequest) => {
-		const url = req.url();
-		// favicon / icon 404s are expected (no icons yet) — ignore.
-		if (url.includes("/icons/") || url.includes("favicon")) return;
-		problems.push({
-			kind: `requestfailed@${label}`,
-			detail: `${url} — ${req.failure()?.errorText}`,
-		});
-	});
+}
+
+async function login(page: Page, email: string) {
+	await page.goto(`${BASE}/login`, { waitUntil: "networkidle0" });
+	await page.type('input[type="email"]', email);
+	await page.type('input[type="password"]', "Password123!");
+	await Promise.all([
+		page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => null),
+		page.click('button[type="submit"]'),
+	]);
+	await new Promise((r) => setTimeout(r, 1200));
+}
+
+async function shoot(page: Page, path: string, file: string, expect?: string) {
+	await page.goto(`${BASE}${path}`, { waitUntil: "networkidle0" });
+	await new Promise((r) => setTimeout(r, 400));
+	await page.screenshot({ path: `${OUT}/${file}` });
+	const text = await page.evaluate(() => document.body.innerText);
+	const ok = expect ? text.includes(expect) : true;
+	results.push(`${path} → ${file} ${expect ? `(has "${expect}"=${ok})` : ""}`);
 }
 
 async function main() {
 	const browser = await puppeteer.launch({
 		executablePath: CHROME,
 		headless: true,
-		args: ["--no-sandbox", "--window-size=440,900"],
+		args: ["--no-sandbox"],
 	});
-	const results: string[] = [];
-
 	try {
-		// 1. Unauthenticated root → should redirect to /login
-		const page = await browser.newPage();
-		await page.setViewport({ width: 440, height: 900 });
-		attach(page, "login");
-		await page.goto(`${BASE}/`, { waitUntil: "networkidle0" });
-		const afterRoot = page.url();
-		results.push(`root redirect → ${afterRoot}`);
-		await page.screenshot({ path: `${OUT}/01-login.png` });
-
-		const hasEmail = await page.$('input[type="email"]');
-		const hasPassword = await page.$('input[type="password"]');
-		results.push(`login form: email=${!!hasEmail} password=${!!hasPassword}`);
-
-		// 2. Log in as the seeded teacher
-		await page.type('input[type="email"]', "teacher@test.com");
-		await page.type('input[type="password"]', "Password123!");
-		await Promise.all([
-			page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => null),
-			page.click('button[type="submit"]'),
-		]);
-		// give the client redirect (/ → /app) a moment
-		await new Promise((r) => setTimeout(r, 1500));
-		const afterLogin = page.url();
-		results.push(`after login → ${afterLogin}`);
-		await page.screenshot({ path: `${OUT}/02-app-teacher.png` });
-
-		const bodyText = await page.evaluate(() => document.body.innerText);
-		results.push(
-			`teacher home shows name(الأستاذ أحمد)=${bodyText.includes("الأستاذ أحمد")} role(teacher)=${bodyText.includes("teacher")}`,
-		);
-
-		// 3. Direct hit on a protected route while logged in
-		await page.goto(`${BASE}/app`, { waitUntil: "networkidle0" });
-		results.push(`/app direct → ${page.url()}`);
-		await page.screenshot({ path: `${OUT}/03-app-direct.png` });
-
-		// 4. Fresh context: student login
-		const ctx = await browser.createBrowserContext();
-		const sp = await ctx.newPage();
+		// ── Student ──
+		const sctx = await browser.createBrowserContext();
+		const sp = await sctx.newPage();
 		await sp.setViewport({ width: 440, height: 900 });
 		attach(sp, "student");
-		await sp.goto(`${BASE}/login`, { waitUntil: "networkidle0" });
-		await sp.type('input[type="email"]', "ali@test.com");
-		await sp.type('input[type="password"]', "Password123!");
-		await Promise.all([
-			sp.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => null),
-			sp.click('button[type="submit"]'),
-		]);
-		await new Promise((r) => setTimeout(r, 1500));
-		results.push(`student after login → ${sp.url()}`);
-		const sText = await sp.evaluate(() => document.body.innerText);
-		results.push(`student home shows name(علي حسن)=${sText.includes("علي حسن")}`);
-		await sp.screenshot({ path: `${OUT}/04-app-student.png` });
+		await login(sp, "ali@test.com");
+		results.push(`student landed → ${sp.url()}`);
+		await shoot(sp, "/student", "10-student-home.png", "علي حسن");
+		await shoot(sp, "/student/leaderboard", "11-student-leaderboard.png");
+		await shoot(sp, "/student/notifications", "12-student-notifications.png");
+		await shoot(sp, "/student/settings", "13-student-settings.png");
+
+		// ── Teacher ──
+		const tctx = await browser.createBrowserContext();
+		const tp = await tctx.newPage();
+		await tp.setViewport({ width: 440, height: 900 });
+		attach(tp, "teacher");
+		await login(tp, "teacher@test.com");
+		results.push(`teacher landed → ${tp.url()}`);
+		await shoot(tp, "/teacher", "20-teacher-home.png", "حلقة");
+		await shoot(tp, "/teacher/requests", "21-teacher-requests.png");
+		await shoot(tp, "/teacher/leaderboard", "22-teacher-leaderboard.png");
 	} finally {
 		await browser.close();
 	}
@@ -107,11 +85,11 @@ async function main() {
 	for (const r of results) console.log("•", r);
 	console.log(`\n===== PROBLEMS (${problems.length}) =====`);
 	for (const p of problems) console.log(`✗ [${p.kind}] ${p.detail}`);
-	if (problems.length === 0) console.log("✓ no console/page errors");
+	if (!problems.length) console.log("✓ no console/page errors");
 	console.log(`\nscreenshots → ${OUT}`);
 }
 
-main().catch((err) => {
-	console.error("verify crashed:", err);
+main().catch((e) => {
+	console.error("verify crashed:", e);
 	process.exit(1);
 });

@@ -1,5 +1,6 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 
+import { I18nProvider } from "@/lib/i18n";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -26,7 +27,9 @@ function RootComponent() {
 				<HeadContent />
 			</head>
 			<body>
-				<Outlet />
+				<I18nProvider initialLocale="ar">
+					<Outlet />
+				</I18nProvider>
 				<Scripts />
 			</body>
 		</html>
