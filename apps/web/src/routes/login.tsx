@@ -1,63 +1,102 @@
-import { signIn } from "@/lib/auth-client";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { AuthShell, OtpInput } from "@/components/auth-ui";
+import { Button, TextInput } from "@/components/ui";
+import { emailOtp, signIn } from "@/lib/auth-client";
+import { useI18n } from "@/lib/i18n";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Lock, Mail } from "lucide-react";
 import { useState } from "react";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
-/**
- * Minimal email/password login. Phase 3 replaces this with the full ported
- * screen (Cairo styling, AR/EN/DE, email-confirm + not-confirmed states,
- * register / forgot-password links).
- */
 function LoginPage() {
+	const { t } = useI18n();
 	const navigate = useNavigate();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [otp, setOtp] = useState("");
+	const [needsConfirm, setNeedsConfirm] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
-	async function onSubmit(e: React.FormEvent) {
+	async function onLogin(e: React.FormEvent) {
 		e.preventDefault();
 		setLoading(true);
 		setError(null);
-		const { error } = await signIn.email({ email, password });
+		const { data, error } = await signIn.email({ email, password });
 		setLoading(false);
-		if (error) {
-			setError(error.message ?? "Login failed");
+		if (error) return setError(error.message ?? "Login failed");
+		if (data && data.user && !data.user.emailVerified) {
+			await emailOtp.sendVerificationOtp({ email, type: "email-verification" });
+			setNeedsConfirm(true);
 			return;
 		}
 		navigate({ to: "/" });
 	}
 
+	async function onConfirm(e: React.FormEvent) {
+		e.preventDefault();
+		setLoading(true);
+		setError(null);
+		const { error } = await emailOtp.verifyEmail({ email, otp });
+		setLoading(false);
+		if (error) return setError(error.message ?? "Invalid code");
+		navigate({ to: "/" });
+	}
+
+	if (needsConfirm) {
+		return (
+			<AuthShell title={t("auth.confirmTitle")} subtitle={t("auth.confirmHint")}>
+				<form onSubmit={onConfirm} className="flex flex-col gap-3">
+					<OtpInput value={otp} onChange={setOtp} />
+					{error ? <p className="text-[13px] text-error">{error}</p> : null}
+					<Button type="submit" loading={loading}>
+						{t("auth.confirm")}
+					</Button>
+					<button
+						type="button"
+						onClick={() => emailOtp.sendVerificationOtp({ email, type: "email-verification" })}
+						className="text-[13px] font-semibold text-primary"
+					>
+						{t("auth.resend")}
+					</button>
+				</form>
+			</AuthShell>
+		);
+	}
+
 	return (
-		<main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 p-6">
-			<h1 className="text-2xl font-bold text-primary">رفيق القرآن</h1>
-			<form onSubmit={onSubmit} className="flex flex-col gap-3">
-				<input
-					className="h-[54px] rounded-lg border border-border bg-surface px-4"
+		<AuthShell title={t("appName")} subtitle={t("auth.subtitle")}>
+			<form onSubmit={onLogin} className="flex flex-col gap-3">
+				<TextInput
+					icon={<Mail size={20} />}
 					type="email"
-					placeholder="البريد الإلكتروني"
+					placeholder={t("auth.email")}
 					value={email}
 					onChange={(e) => setEmail(e.target.value)}
 					required
 				/>
-				<input
-					className="h-[54px] rounded-lg border border-border bg-surface px-4"
+				<TextInput
+					icon={<Lock size={20} />}
 					type="password"
-					placeholder="كلمة المرور"
+					placeholder={t("auth.password")}
 					value={password}
 					onChange={(e) => setPassword(e.target.value)}
 					required
 				/>
-				{error && <p className="text-sm text-error">{error}</p>}
-				<button
-					type="submit"
-					disabled={loading}
-					className="h-[54px] rounded-lg bg-primary font-semibold text-white disabled:opacity-60"
-				>
-					{loading ? "..." : "تسجيل الدخول"}
-				</button>
+				<Link to="/forgot-password" className="text-end text-[13px] font-semibold text-primary">
+					{t("auth.forgot")}
+				</Link>
+				{error ? <p className="text-[13px] text-error">{error}</p> : null}
+				<Button type="submit" loading={loading}>
+					{t("auth.loginCta")}
+				</Button>
 			</form>
-		</main>
+			<p className="text-center text-[13px] text-text-secondary">
+				{t("auth.noAccount")}{" "}
+				<Link to="/register" className="font-semibold text-primary">
+					{t("auth.signupCta")}
+				</Link>
+			</p>
+		</AuthShell>
 	);
 }

@@ -46,6 +46,9 @@ function TeacherSettings() {
 					))}
 				</div>
 			</div>
+			<Button variant="outline" onClick={() => navigate({ to: "/change-password" })}>
+				{t("settings.changePassword")}
+			</Button>
 			<Button variant="outline" onClick={logout}>
 				{t("settings.logout")}
 			</Button>

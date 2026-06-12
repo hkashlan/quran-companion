@@ -64,7 +64,9 @@ function SettingsScreen() {
 				{t("settings.enableNotifications")}
 				{pushMsg ? ` — ${pushMsg}` : ""}
 			</Button>
-			<Button variant="outline">{t("settings.changePassword")}</Button>
+			<Button variant="outline" onClick={() => navigate({ to: "/change-password" })}>
+				{t("settings.changePassword")}
+			</Button>
 			<Button variant="outline" onClick={logout}>
 				{t("settings.logout")}
 			</Button>
