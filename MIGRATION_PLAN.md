@@ -111,13 +111,13 @@ font **Cairo**, single light theme, **RTL-first** (Arabic).
 
 ## Phased execution
 
-- [x] **Phase 0 — Foundation (this commit):** monorepo scaffold, `packages/db` full schema port, better-auth tables, app skeleton, PWA + push SW stub, Vercel cron stub, plan doc.
-- [ ] **Phase 1 — DB + auth live:** `pnpm install`, generate + run migrations against a real Postgres, better-auth wired (register/login/confirm/reset), seed script.
-- [ ] **Phase 2 — Repos + server functions:** port repositories + the domain services (scoring, review cycles, leaderboard, permissions) with vitest.
-- [ ] **Phase 3 — Screens:** rebuild auth → student → teacher flows in shadcn/Tailwind, paraglide AR/EN/DE + RTL, matching the current look.
-- [ ] **Phase 4 — Push + scheduler:** Web Push subscribe flow, FCM for native, `sendPush`, `/api/cron/daily`, `vercel.json` cron.
-- [ ] **Phase 5 — Capacitor + OTA:** wrap web build with Capacitor, Capgo live updates, native push, store builds.
-- [ ] **Phase 6 — Cutover:** parity check, deploy to Vercel, retire FastAPI backend.
+- [x] **Phase 0 — Foundation:** monorepo scaffold, `packages/db` full schema port, better-auth tables, app skeleton, PWA + push SW, Vercel cron stub, plan doc.
+- [x] **Phase 1 — DB + auth live:** install, migrations against local Postgres (docker-compose), better-auth register/login verified, dev seed, Chrome harness.
+- [x] **Phase 2 — Domain logic:** scoring / streaks / review-cycle ported as pure functions with 11 passing vitest cases; leaderboard/circle/notification repos.
+- [~] **Phase 3 — Screens:** student + teacher tab verticals done (home, leaderboard, notifications, settings, requests) with live data, RTL, AR/EN/DE, Chrome-verified. **Remaining:** progress charts, the 3 review modals, teacher-student detail, full auth screens (email-confirm/reset), change/forgot password.
+- [x] **Phase 4 — Push + scheduler:** `/api/cron/daily` runs the real pipeline (roll plans → today's review, mark missed, notify); Web Push subscribe flow + `sendPush`. FCM branch is a documented stub.
+- [~] **Phase 5 — Capacitor + OTA:** `capacitor.config.ts` + full runbook ([docs/CAPACITOR.md](docs/CAPACITOR.md)). Native shells/store builds need your accounts.
+- [~] **Phase 6 — Cutover:** Vercel deploy + env + cron runbook ([docs/DEPLOY.md](docs/DEPLOY.md)). Actual deploy + domain cutover need your Vercel/Postgres accounts.
 
 ## Setup (after this scaffold)
 
