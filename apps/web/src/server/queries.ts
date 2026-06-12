@@ -167,6 +167,43 @@ export const respondJoinRequest = createServerFn({ method: "POST" })
 		return { ok: true };
 	});
 
+/** Current student's reviews + sessions for the progress screen. */
+export const getStudentProgress = createServerFn({ method: "GET" }).handler(async () => {
+	const u = await requireUser();
+	const { sessionRecords } = await import("@quran/db/tables/session-record.drizzle");
+	const reviewRows = await db
+		.select({
+			id: reviews.id,
+			surahName: reviews.surahName,
+			verseFrom: reviews.verseFrom,
+			verseTo: reviews.verseTo,
+			assignedDate: reviews.assignedDate,
+			status: reviews.status,
+			pointsEarned: reviews.pointsEarned,
+		})
+		.from(reviews)
+		.where(eq(reviews.studentId, u.id))
+		.orderBy(reviews.assignedDate);
+	const sessionRows = await db
+		.select({
+			id: sessionRecords.id,
+			memorizedSurah: sessionRecords.memorizedSurah,
+			memorizedVerseFrom: sessionRecords.memorizedVerseFrom,
+			memorizedVerseTo: sessionRecords.memorizedVerseTo,
+			sessionDate: sessionRecords.sessionDate,
+			evaluation: sessionRecords.evaluation,
+		})
+		.from(sessionRecords)
+		.where(eq(sessionRecords.studentId, u.id))
+		.orderBy(sessionRecords.sessionDate);
+	return {
+		reviews: reviewRows,
+		sessions: sessionRows,
+		streak: u.streak,
+		points: u.points,
+	};
+});
+
 // ── Review modals (assign-review, add-session, submit-review) ──
 
 const rangeFields = {
