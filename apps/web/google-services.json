@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "143501113134",
+    "project_id": "quran-reminder-5d6e8",
+    "storage_bucket": "quran-reminder-5d6e8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:143501113134:android:fdd0fd787ee7df07272cbf",
+        "android_client_info": {
+          "package_name": "com.qurancompanion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCd-XaKJRPEDaIAIOGBQM6KM4PIe8RkNqc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

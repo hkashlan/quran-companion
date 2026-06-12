@@ -8,21 +8,37 @@ OTA updates use **Capgo** (free tier); native push uses **FCM**, stored in the s
 
 - ✅ Capacitor deps installed (`@capacitor/core`, cli, android, ios,
   push-notifications, `@capgo/capacitor-updater`)
+- ✅ **App id `com.qurancompanion`** — matches the existing Firebase project
+  (`google-services.json` `package_name`), so FCM works without re-registering
 - ✅ `capacitor.config.ts` + static `capacitor-www/` shell (live-mode webDir)
+- ✅ `google-services.json` committed at `apps/web/` (Android Firebase client config)
+- ✅ **Trapeze** config `capacitor.config.yaml` makes native setup reproducible:
+  copies `google-services.json` into `android/app/` and pins the iOS bundle id
 - ✅ Native client `src/lib/native-push.ts` (registers FCM token →
   `subscribeNativePush`), wired into the protected layout
 - ✅ Server FCM send branch (`src/server/fcm.ts`, used by `sendPush`)
-- ✅ **Verified building locally:** `npx cap add android` → Gradle
-  `assembleDebug` produced `app-debug.apk` (7.7 MB); `npx cap add ios` → Xcode
+- ✅ **Verified building locally:** Android `assembleDebug` → `app-debug.apk`
+  (7.7 MB) with `:app:processDebugGoogleServices` running (FCM active); iOS Xcode
   **simulator build succeeded**
 - ⏳ Native projects (`android/`, `ios/`) are gitignored — regenerate with the
-  commands below, or un-ignore them to persist native customizations
+  commands below; Trapeze re-applies the native config each time
+
+## Reproduce the native setup
+
+```bash
+cd apps/web
+pnpm build
+pnpm exec cap add android && pnpm exec cap add ios   # regenerate shells
+pnpm exec cap sync
+pnpm exec trapeze run capacitor.config.yaml -y        # copy google-services + bundle id
+cd android && ./gradlew assembleDebug                 # → app-debug.apk
+```
 
 ## What still needs your accounts
 
 - A deployed PWA URL (set `CAPACITOR_SERVER_URL` for live mode)
-- A Firebase project for FCM (`google-services.json` / `GoogleService-Info.plist`
-  + `FCM_*` env on the server)
+- **iOS** FCM: a `GoogleService-Info.plist` from Firebase (Android is done) + `FCM_*`
+  service-account env on the server for sending
 - A Capgo account/token for OTA; Apple Developer + Google Play for store builds + signing
 
 ## 1. Install Capacitor (from `apps/web`)

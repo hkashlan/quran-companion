@@ -13,7 +13,9 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const serverUrl = process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
-	appId: "com.hkashlan.qurancompanion",
+	// Matches the existing Firebase registration (google-services.json
+	// package_name) so FCM works without re-registering the app.
+	appId: "com.qurancompanion",
 	appName: "Quran Companion",
 	webDir: "capacitor-www",
 	server: {

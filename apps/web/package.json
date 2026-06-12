@@ -40,6 +40,7 @@
     "@inlang/paraglide-js": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/router-plugin": "catalog:",
+    "@trapezedev/configure": "^7.1.4",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

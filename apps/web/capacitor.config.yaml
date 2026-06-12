@@ -1,0 +1,21 @@
+# Trapeze (https://trapeze.dev) — declarative native config, reproducible after
+# `npx cap add`. Run from apps/web:
+#   pnpm exec cap sync
+#   pnpm exec trapeze run capacitor.config.yaml -y
+#
+# Aligns the native apps with the existing Firebase project
+# (google-services.json → package com.qurancompanion) so FCM works as-is.
+platforms:
+  android:
+    # Capacitor's app/build.gradle auto-applies the google-services plugin when
+    # this file is present, so copying it is all that's needed for FCM.
+    copy:
+      # src is resolved relative to the android/ project root.
+      - src: ../google-services.json
+        dest: app/google-services.json
+  ios:
+    targets:
+      App:
+        # Match the Firebase Android package; an iOS GoogleService-Info.plist is
+        # still required for FCM on iOS (not provided here).
+        bundleId: com.qurancompanion
