@@ -1,8 +1,8 @@
 import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { getTeacherHome } from "@/server/queries";
-import { createFileRoute } from "@tanstack/react-router";
-import { Users } from "lucide-react";
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { CalendarPlus, ClipboardList, Users } from "lucide-react";
 
 export const Route = createFileRoute("/_protected/teacher/")({
 	loader: async () => getTeacherHome(),
@@ -38,6 +38,31 @@ function TeacherHome() {
 						<span className="flex items-center gap-1 text-[12px] text-text-light">
 							<Users size={14} /> {c.studentsCount} {t("teacher.members")}
 						</span>
+						{c.students.length > 0 ? (
+							<div className="flex flex-col divide-y divide-border border-t border-border">
+								{c.students.map((s) => (
+									<div key={s.id} className="flex items-center justify-between gap-2 py-2">
+										<span className="text-[13px] font-semibold text-text">{s.name}</span>
+										<div className="flex gap-1">
+											<Link
+												to="/assign-review"
+												search={{ studentId: s.id }}
+												className="flex items-center gap-1 rounded-md bg-primary-light px-2 py-1 text-[11px] font-semibold text-primary"
+											>
+												<ClipboardList size={13} /> {t("teacher.assignReview")}
+											</Link>
+											<Link
+												to="/add-session"
+												search={{ studentId: s.id }}
+												className="flex items-center gap-1 rounded-md bg-secondary-light px-2 py-1 text-[11px] font-semibold text-secondary"
+											>
+												<CalendarPlus size={13} /> {t("teacher.addSession")}
+											</Link>
+										</div>
+									</div>
+								))}
+							</div>
+						) : null}
 					</Card>
 				))}
 			</Section>

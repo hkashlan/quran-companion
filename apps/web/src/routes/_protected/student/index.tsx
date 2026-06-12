@@ -139,7 +139,16 @@ function StudentHome() {
 						<span className="rounded-md bg-primary-light px-3 py-2 text-center text-[15px] font-bold text-primary">
 							{reviewRange(data.activeReview)}
 						</span>
-						<Button>{t("home.submit")}</Button>
+						<Button
+							onClick={() =>
+								router.navigate({
+									to: "/submit-review",
+									search: { reviewId: data.activeReview!.id },
+								})
+							}
+						>
+							{t("home.submit")}
+						</Button>
 					</Card>
 				) : (
 					<Card className="text-center text-[13px] text-text-secondary">

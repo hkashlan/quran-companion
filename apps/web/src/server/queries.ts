@@ -106,11 +106,23 @@ export const markAllNotificationsRead = createServerFn({ method: "POST" }).handl
 	return { marked };
 });
 
-/** Teacher: circles I own/teach. */
+/** Teacher: circles I own/teach, each with its student members. */
 export const getTeacherHome = createServerFn({ method: "GET" }).handler(async () => {
 	const u = await requireUser();
 	const circles = await listCirclesForUser(u.id);
-	return { user: { id: u.id, name: u.name }, circles };
+	const { circleMemberships } = await import("@quran/db/tables/circle-membership.drizzle");
+	const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+	const withStudents = await Promise.all(
+		circles.map(async (c) => {
+			const students = await db
+				.select({ id: userTable.id, name: userTable.name })
+				.from(circleMemberships)
+				.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+				.where(and(eq(circleMemberships.circleId, c.id), eq(circleMemberships.role, "student")));
+			return { ...c, students };
+		}),
+	);
+	return { user: { id: u.id, name: u.name }, circles: withStudents };
 });
 
 /** Teacher: pending join requests across circles I own. */
@@ -153,6 +165,159 @@ export const respondJoinRequest = createServerFn({ method: "POST" })
 			});
 		}
 		return { ok: true };
+	});
+
+// ── Review modals (assign-review, add-session, submit-review) ──
+
+const rangeFields = {
+	rangeMode: z.enum(["verses", "pages"]).default("verses"),
+	startSurahNumber: z.number().int(),
+	startVerse: z.number().int(),
+	endSurahNumber: z.number().int(),
+	endVerse: z.number().int(),
+};
+
+/** Teacher: a student's name + current active review plan (for edit prefill). */
+export const getStudentModalData = createServerFn({ method: "GET" })
+	.validator(z.object({ studentId: z.string() }))
+	.handler(async ({ data }) => {
+		await requireUser();
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		const [student] = await db
+			.select({ id: userTable.id, name: userTable.name })
+			.from(userTable)
+			.where(eq(userTable.id, data.studentId))
+			.limit(1);
+		const [plan] = await db
+			.select()
+			.from(reviewPlans)
+			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)))
+			.limit(1);
+		return { student: student ?? null, plan: plan ?? null };
+	});
+
+/** Teacher: create or update the student's active review plan. */
+export const assignReviewPlan = createServerFn({ method: "POST" })
+	.validator(z.object({ studentId: z.string(), dailyAmount: z.number().int().min(1), ...rangeFields }))
+	.handler(async ({ data }) => {
+		const teacher = await requireUser();
+		const { reviewPlans } = await import("@quran/db/tables/review-plan.drizzle");
+		const existing = await db
+			.select({ id: reviewPlans.id })
+			.from(reviewPlans)
+			.where(and(eq(reviewPlans.studentId, data.studentId), eq(reviewPlans.isActive, true)))
+			.limit(1);
+		const values = {
+			studentId: data.studentId,
+			teacherId: teacher.id,
+			startSurahNumber: data.startSurahNumber,
+			startVerse: data.startVerse,
+			endSurahNumber: data.endSurahNumber,
+			endVerse: data.endVerse,
+			rangeMode: data.rangeMode,
+			dailyAmount: data.dailyAmount,
+			dailyUnit: data.rangeMode,
+			isActive: true,
+		};
+		if (existing[0]) {
+			await db.update(reviewPlans).set(values).where(eq(reviewPlans.id, existing[0].id));
+			return { ok: true, updated: true };
+		}
+		await db.insert(reviewPlans).values(values);
+		return { ok: true, updated: false };
+	});
+
+/** Teacher: log a memorization session. */
+export const createSession = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			studentId: z.string(),
+			sessionDate: z.string(),
+			sessionTime: z.string().optional(),
+			notes: z.string().optional(),
+			evaluation: z.string().optional(),
+			...rangeFields,
+		}),
+	)
+	.handler(async ({ data }) => {
+		const teacher = await requireUser();
+		const { getSurahName } = await import("@quran/db/domain/surahs");
+		const { sessionRecords } = await import("@quran/db/tables/session-record.drizzle");
+		await db.insert(sessionRecords).values({
+			studentId: data.studentId,
+			teacherId: teacher.id,
+			memorizedSurah: getSurahName(data.startSurahNumber, "ar"),
+			memorizedVerseFrom: data.startVerse,
+			startSurahNumber: data.startSurahNumber,
+			endSurahNumber: data.endSurahNumber,
+			endSurahName: getSurahName(data.endSurahNumber, "ar"),
+			memorizedVerseTo: data.endVerse,
+			rangeMode: data.rangeMode,
+			sessionDate: data.sessionDate,
+			sessionTime: data.sessionTime ?? null,
+			notes: data.notes ?? null,
+			evaluation: data.evaluation ?? null,
+		});
+		return { ok: true };
+	});
+
+/** Student: the review being submitted (assigned range + ownership check). */
+export const getSubmitReviewData = createServerFn({ method: "GET" })
+	.validator(z.object({ reviewId: z.string() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const [review] = await db
+			.select()
+			.from(reviews)
+			.where(and(eq(reviews.id, data.reviewId), eq(reviews.studentId, u.id)))
+			.limit(1);
+		return { review: review ?? null };
+	});
+
+/** Student: submit a completion → records submission, completes review, scores it. */
+export const submitReview = createServerFn({ method: "POST" })
+	.validator(z.object({ reviewId: z.string(), ...rangeFields }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { getSurahName } = await import("@quran/db/domain/surahs");
+		const { calculatePoints, nextStreak, applyPoints } = await import("@quran/db/domain/scoring");
+		const { reviewSubmissions } = await import("@quran/db/tables/review-submission.drizzle");
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+
+		const [review] = await db
+			.select()
+			.from(reviews)
+			.where(and(eq(reviews.id, data.reviewId), eq(reviews.studentId, u.id)))
+			.limit(1);
+		if (!review) return { ok: false as const };
+
+		await db.insert(reviewSubmissions).values({
+			reviewId: review.id,
+			studentId: u.id,
+			startSurahNumber: data.startSurahNumber,
+			startSurahName: getSurahName(data.startSurahNumber, "ar"),
+			startVerse: data.startVerse,
+			endSurahNumber: data.endSurahNumber,
+			endSurahName: getSurahName(data.endSurahNumber, "ar"),
+			endVerse: data.endVerse,
+		});
+
+		const todayStr = today();
+		const [earned] = calculatePoints(review.assignedDate, todayStr);
+		if (review.status !== "completed") {
+			await db
+				.update(reviews)
+				.set({ status: "completed", completedAt: new Date(), pointsEarned: earned })
+				.where(eq(reviews.id, review.id));
+			const newPoints = applyPoints(u.points, earned);
+			const newStreak = nextStreak(u.streak, (u as { streakLastDate?: string | null }).streakLastDate ?? null, todayStr);
+			await db
+				.update(userTable)
+				.set({ points: newPoints, streak: newStreak, streakLastDate: todayStr })
+				.where(eq(userTable.id, u.id));
+		}
+		return { ok: true as const, earned };
 	});
 
 export const joinCircleByCode = createServerFn({ method: "POST" })
