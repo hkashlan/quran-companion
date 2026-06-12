@@ -25,3 +25,5 @@ coverage/
 # Capacitor native shells (added in Phase 5)
 android/
 ios/
+capacitor-www/
+.vercel

@@ -9,7 +9,10 @@
     "seed": "node --env-file=../../.env --import tsx/esm scripts/seed.ts",
     "verify": "node --import tsx/esm scripts/verify.ts",
     "icons": "node --import tsx/esm scripts/generate-icons.ts",
-    "auth:generate": "pnpm dlx @better-auth/cli generate --config ./src/lib/auth.ts --output ../../packages/db/src/tables/auth.drizzle.ts"
+    "auth:generate": "pnpm dlx @better-auth/cli generate --config ./src/lib/auth.ts --output ../../packages/db/src/tables/auth.drizzle.ts",
+    "build:android": "node --import tsx/esm scripts/build-android.ts",
+    "db:migrate": "cd ../../packages/db && pnpm db:migrate",
+    "vercel-build": "pnpm db:migrate && vite build"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.0",

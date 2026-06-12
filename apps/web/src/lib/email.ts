@@ -48,11 +48,12 @@ export async function sendOtpEmail(
 	if (!r) return false;
 	const t =
 		(type as OtpType) in SUBJECTS ? (type as OtpType) : "email-verification";
-	await r.emails.send({
+	const { error } = await r.emails.send({
 		from: process.env.EMAIL_FROM ?? "Quran Companion <onboarding@resend.dev>",
 		to: email,
 		subject: SUBJECTS[t],
 		html: html(otp, t),
 	});
+	if (error) throw new Error(`Resend error: ${error.message}`);
 	return true;
 }
