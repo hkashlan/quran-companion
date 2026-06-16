@@ -1,8 +1,15 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { BookOpen, MapPin, Search } from "lucide-react";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import {
+	BookOpen,
+	Clock,
+	MapPin,
+	Search,
+	SlidersHorizontal,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, Card, Section, StatCard, TextInput } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { reviewRange } from "@/lib/review-range";
 import { getStudentHome, joinCircleByCode } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student/")({
@@ -29,24 +36,6 @@ function useCountdownToMidnight() {
 	return text;
 }
 
-function reviewRange(r: {
-	surahName: string;
-	verseFrom: number;
-	verseTo: number;
-	endSurahName: string | null;
-	rangeMode: string;
-	startPage: number | null;
-	endPage: number | null;
-}): string {
-	if (r.rangeMode === "pages" && r.startPage && r.endPage)
-		return `ص ${r.startPage}–${r.endPage}`;
-	const end =
-		r.endSurahName && r.endSurahName !== r.surahName
-			? ` – ${r.endSurahName}`
-			: "";
-	return `${r.surahName}${end}: ${r.verseFrom}–${r.verseTo}`;
-}
-
 function StudentHome() {
 	const { t } = useI18n();
 	const router = useRouter();
@@ -54,7 +43,9 @@ function StudentHome() {
 	const countdown = useCountdownToMidnight();
 	const [code, setCode] = useState("");
 	const [joining, setJoining] = useState(false);
-	const [joinMsg, setJoinMsg] = useState<string | null>(null);
+	const [joinMsg, setJoinMsg] = useState<{ text: string; ok: boolean } | null>(
+		null,
+	);
 
 	async function join() {
 		if (!code.trim()) return;
@@ -63,11 +54,17 @@ function StudentHome() {
 		const res = await joinCircleByCode({ data: { code: code.trim() } });
 		setJoining(false);
 		if (res.ok) {
-			setJoinMsg(`✓ ${res.circleTitle}`);
+			setJoinMsg({ text: t("home.requestSent"), ok: true });
 			setCode("");
 			router.invalidate();
 		} else {
-			setJoinMsg("✗");
+			const key =
+				res.error === "not_found"
+					? "home.notFound"
+					: res.error === "already_member"
+						? "home.alreadyMember"
+						: "home.alreadyRequested";
+			setJoinMsg({ text: t(key), ok: false });
 		}
 	}
 
@@ -138,7 +135,11 @@ function StudentHome() {
 						</button>
 					</div>
 					{joinMsg ? (
-						<p className="text-[13px] text-text-secondary">{joinMsg}</p>
+						<p
+							className={`text-[13px] font-semibold ${joinMsg.ok ? "text-primary" : "text-error"}`}
+						>
+							{joinMsg.text}
+						</p>
 					) : null}
 				</Card>
 			) : (
@@ -173,12 +174,38 @@ function StudentHome() {
 				</Section>
 			)}
 
+			{data.pendingRequests.length > 0 ? (
+				<Section title={t("home.pendingRequests")}>
+					<Card className="flex flex-col gap-2 p-3">
+						{data.pendingRequests.map((r) => (
+							<div
+								key={r.id}
+								className="flex items-center justify-between gap-2 text-[13px]"
+							>
+								<span className="font-semibold text-text">{r.circleTitle}</span>
+								<span className="flex items-center gap-1 text-[12px] text-text-light">
+									<Clock size={13} /> {t("home.awaitingApproval")}
+								</span>
+							</div>
+						))}
+					</Card>
+				</Section>
+			) : null}
+
 			<Section title={t("home.activeReview")}>
 				{data.activeReview ? (
 					<Card className="flex flex-col gap-3">
 						<span className="rounded-md bg-primary-light px-3 py-2 text-center text-[15px] font-bold text-primary">
 							{reviewRange(data.activeReview)}
 						</span>
+						{data.activeReview.rangeMode === "pages" &&
+						data.activeReview.progressPage != null ? (
+							<span className="text-center text-[13px] text-text-secondary">
+								{t("home.reachedPage", {
+									page: data.activeReview.progressPage,
+								})}
+							</span>
+						) : null}
 						<Button
 							onClick={() =>
 								router.navigate({
@@ -196,6 +223,20 @@ function StudentHome() {
 					</Card>
 				)}
 			</Section>
+
+			<Link to="/student/plan" className="block">
+				<Card className="flex items-center justify-between">
+					<span className="flex items-center gap-2 text-[14px] font-semibold text-text">
+						<SlidersHorizontal size={18} className="text-primary" />
+						{t("plan.title")}
+					</span>
+					{data.hasPendingPlanChange ? (
+						<span className="flex items-center gap-1 text-[12px] text-text-light">
+							<Clock size={13} /> {t("plan.awaitingApproval")}
+						</span>
+					) : null}
+				</Card>
+			</Link>
 
 			{data.undoneReviews.length > 0 ? (
 				<Section title={t("home.pendingReviews")}>

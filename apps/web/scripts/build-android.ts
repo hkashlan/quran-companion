@@ -76,8 +76,8 @@ console.log("Copied shell index.html into capacitor-www/");
 
 // ── 3. Cap sync ───────────────────────────────────────────────────────────────
 console.log("\n=== Step 3: cap sync android ===");
-const serverUrl = process.env.CAPACITOR_SERVER_URL;
-if (serverUrl) process.env.CAPACITOR_SERVER_URL = serverUrl;
+const serverUrl = process.env.CAPACITOR_SERVER_URL ?? "https://quran-companion-web.vercel.app";
+process.env.CAPACITOR_SERVER_URL = serverUrl;
 run("npx cap sync android");
 
 // ── 4. Keystore setup (release only) ─────────────────────────────────────────

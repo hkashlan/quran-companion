@@ -1,20 +1,36 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Card } from "@/components/ui";
+import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
-import { getJoinRequests, respondJoinRequest } from "@/server/queries";
+import {
+	getJoinRequests,
+	getPlanChangeRequests,
+	respondJoinRequest,
+	respondPlanChange,
+} from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/teacher/requests")({
-	loader: async () => getJoinRequests(),
+	loader: async () => {
+		const [join, planChanges] = await Promise.all([
+			getJoinRequests(),
+			getPlanChangeRequests(),
+		]);
+		return { requests: join.requests, planChanges: planChanges.requests };
+	},
 	component: RequestsScreen,
 });
 
 function RequestsScreen() {
 	const { t } = useI18n();
 	const router = useRouter();
-	const { requests } = Route.useLoaderData();
+	const { requests, planChanges } = Route.useLoaderData();
 
 	async function respond(id: string, status: "approved" | "rejected") {
 		await respondJoinRequest({ data: { id, status } });
+		router.invalidate();
+	}
+
+	async function respondPlan(id: string, status: "approved" | "rejected") {
+		await respondPlanChange({ data: { id, status } });
 		router.invalidate();
 	}
 
@@ -58,6 +74,47 @@ function RequestsScreen() {
 					</Card>
 				))
 			)}
+
+			{planChanges.length > 0 ? (
+				<Section title={t("planReq.title")}>
+					<div className="flex flex-col gap-3">
+						{planChanges.map((r) => {
+							const label =
+								r.field === "daily_amount"
+									? `${t("planReq.daily")}: ${r.currentDailyAmount} → ${r.proposedDailyAmount}`
+									: `${t("planReq.start")}: ${r.currentStartPage ?? "—"} → ${r.proposedStartPage}`;
+							return (
+								<Card key={r.id} className="flex flex-col gap-3">
+									<div className="flex flex-col">
+										<span className="text-[15px] font-bold text-text">
+											{r.studentName}
+										</span>
+										<span className="text-[13px] text-text-secondary">
+											{label}
+										</span>
+									</div>
+									<div className="flex gap-2">
+										<button
+											type="button"
+											onClick={() => respondPlan(r.id, "approved")}
+											className="flex-1 rounded-md bg-primary py-2 text-[13px] font-semibold text-white"
+										>
+											{t("requests.approve")}
+										</button>
+										<button
+											type="button"
+											onClick={() => respondPlan(r.id, "rejected")}
+											className="flex-1 rounded-md border border-border bg-surface py-2 text-[13px] font-semibold text-text-secondary"
+										>
+											{t("requests.reject")}
+										</button>
+									</div>
+								</Card>
+							);
+						})}
+					</div>
+				</Section>
+			) : null}
 		</div>
 	);
 }

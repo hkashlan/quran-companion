@@ -1,11 +1,15 @@
 import { db } from "@quran/db/db";
-import { nextReviewWindow } from "@quran/db/domain/review-cycle";
+import {
+	lastReachedPage,
+	nextPageWindow,
+	nextReviewWindow,
+} from "@quran/db/domain/review-cycle";
 import { getSurahName } from "@quran/db/domain/surahs";
 import { user } from "@quran/db/tables/auth.drizzle";
 import { notificationDeliveries } from "@quran/db/tables/notification-delivery.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { reviewPlans } from "@quran/db/tables/review-plan.drizzle";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 
 import { sendPush } from "./push.ts";
 
@@ -31,6 +35,7 @@ export async function runDailyScheduler(today: string) {
 			startVerse: reviewPlans.startVerse,
 			endSurahNumber: reviewPlans.endSurahNumber,
 			endVerse: reviewPlans.endVerse,
+			startPage: reviewPlans.startPage,
 			dailyAmount: reviewPlans.dailyAmount,
 			rangeMode: reviewPlans.rangeMode,
 		})
@@ -42,7 +47,20 @@ export async function runDailyScheduler(today: string) {
 	let notified = 0;
 
 	for (const plan of plans) {
-		// 1. mark overdue pending as missed
+		// 1. finalize overdue pending reviews. A pages review that hit its target
+		// is stamped with completedAt (and already scored on submit) → completed;
+		// everything else overdue (verses, or a pages shortfall) → missed.
+		await db
+			.update(reviews)
+			.set({ status: "completed" })
+			.where(
+				and(
+					eq(reviews.reviewPlanId, plan.id),
+					eq(reviews.status, "pending"),
+					lt(reviews.assignedDate, today),
+					sql`${reviews.completedAt} is not null`,
+				),
+			);
 		const overdue = await db
 			.update(reviews)
 			.set({ status: "missed" })
@@ -51,6 +69,7 @@ export async function runDailyScheduler(today: string) {
 					eq(reviews.reviewPlanId, plan.id),
 					eq(reviews.status, "pending"),
 					lt(reviews.assignedDate, today),
+					sql`${reviews.completedAt} is null`,
 				),
 			)
 			.returning({ id: reviews.id });
@@ -72,44 +91,77 @@ export async function runDailyScheduler(today: string) {
 				surahNumber: reviews.surahNumber,
 				endSurahNumber: reviews.endSurahNumber,
 				verseTo: reviews.verseTo,
+				startPage: reviews.startPage,
+				endPage: reviews.endPage,
+				progressPage: reviews.progressPage,
 			})
 			.from(reviews)
 			.where(eq(reviews.reviewPlanId, plan.id))
 			.orderBy(desc(reviews.createdAt))
 			.limit(1);
 
-		const { start, end } = nextReviewWindow(plan, last[0] ?? null);
-		const surahName = getSurahName(start.surah, "ar");
-		const endSurahName = getSurahName(end.surah, "ar");
-
-		await db.insert(reviews).values({
-			studentId: plan.studentId,
-			teacherId: plan.teacherId,
-			reviewPlanId: plan.id,
-			rangeMode: plan.rangeMode,
-			surahNumber: start.surah,
-			surahName,
-			verseFrom: start.verse,
-			endSurahNumber: end.surah,
-			endSurahName,
-			verseTo: end.verse,
-			assignedDate: today,
-			status: "pending",
-		});
+		// 2. create the next review — page cursor for pages plans, else verse window
+		let body: string;
+		if (plan.rangeMode === "pages") {
+			// Advance from the page the student actually reached (progress), not the
+			// assigned window end — so overachieving jumps ahead and a shortfall is
+			// continued (not skipped) the next day.
+			const { startPage, endPage } = nextPageWindow(
+				{ startPage: plan.startPage ?? 1, dailyAmount: plan.dailyAmount },
+				lastReachedPage(
+					last[0]?.progressPage ?? null,
+					last[0]?.startPage ?? null,
+					last[0]?.endPage ?? null,
+				),
+			);
+			await db.insert(reviews).values({
+				studentId: plan.studentId,
+				teacherId: plan.teacherId,
+				reviewPlanId: plan.id,
+				rangeMode: "pages",
+				startPage,
+				endPage,
+				assignedDate: today,
+				status: "pending",
+			});
+			body = `ص ${startPage}–${endPage}`;
+		} else {
+			const { start, end } = nextReviewWindow(plan, last[0] ?? null);
+			const surahName = getSurahName(start.surah, "ar");
+			const endSurahName = getSurahName(end.surah, "ar");
+			await db.insert(reviews).values({
+				studentId: plan.studentId,
+				teacherId: plan.teacherId,
+				reviewPlanId: plan.id,
+				rangeMode: plan.rangeMode,
+				surahNumber: start.surah,
+				surahName,
+				verseFrom: start.verse,
+				endSurahNumber: end.surah,
+				endSurahName,
+				verseTo: end.verse,
+				assignedDate: today,
+				status: "pending",
+			});
+			body = `${surahName}: ${start.verse}–${end.verse}`;
+		}
 		created += 1;
 
 		// 3. notify
 		const title = "مراجعة جديدة";
-		const body = `${surahName}: ${start.verse}–${end.verse}`;
-		await db.insert(notificationDeliveries).values({
-			userId: plan.studentId,
-			eventType: "review_assigned",
-			title,
-			body,
-			status: "sent",
-			dedupeKey: `review_assigned:${plan.id}:${today}`,
-			sentAt: new Date(),
-		});
+		// dedupeKey is unique so a retried run doesn't double-send (or crash).
+		await db
+			.insert(notificationDeliveries)
+			.values({
+				userId: plan.studentId,
+				eventType: "review_assigned",
+				title,
+				body,
+				status: "sent",
+				dedupeKey: `review_assigned:${plan.id}:${today}`,
+				sentAt: new Date(),
+			})
+			.onConflictDoNothing({ target: notificationDeliveries.dedupeKey });
 		await sendPush(plan.studentId, { title, body, data: { url: "/student" } });
 		notified += 1;
 	}

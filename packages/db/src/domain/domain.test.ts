@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
 	advanceWithinPlan,
 	comparePositions,
+	isStartAdvance,
+	lastReachedPage,
+	MUSHAF_PAGES,
+	nextPageWindow,
 	nextPosition,
 	nextReviewWindow,
 	nextStartPosition,
@@ -111,5 +115,83 @@ describe("review-cycle verse math", () => {
 	it("wraps to plan start once the plan end is reached", () => {
 		const prev = { endSurahNumber: 2, surahNumber: 2, verseTo: 20 };
 		expect(nextStartPosition(plan, prev)).toEqual({ surah: 1, verse: 1 });
+	});
+});
+
+describe("review-cycle page cursor", () => {
+	const plan = { startPage: 100, dailyAmount: 10 };
+
+	it("starts at the plan start page with no previous review", () => {
+		expect(nextPageWindow(plan, null)).toEqual({
+			startPage: 100,
+			endPage: 109,
+		});
+	});
+
+	it("advances from the previous review's end page", () => {
+		expect(nextPageWindow(plan, 109)).toEqual({ startPage: 110, endPage: 119 });
+	});
+
+	it("clamps the day's window at page 604", () => {
+		expect(nextPageWindow(plan, 599)).toEqual({
+			startPage: 600,
+			endPage: MUSHAF_PAGES,
+		});
+	});
+
+	it("wraps back to the start page after reaching 604", () => {
+		expect(nextPageWindow(plan, MUSHAF_PAGES)).toEqual({
+			startPage: 100,
+			endPage: 109,
+		});
+	});
+
+	it("clamps when daily amount exceeds the remaining pages", () => {
+		expect(nextPageWindow({ startPage: 600, dailyAmount: 50 }, null)).toEqual({
+			startPage: 600,
+			endPage: MUSHAF_PAGES,
+		});
+	});
+
+	it("flags a later start page as needing approval", () => {
+		expect(isStartAdvance(100, 200)).toBe(true);
+		expect(isStartAdvance(100, 50)).toBe(false);
+		expect(isStartAdvance(100, 100)).toBe(false);
+	});
+
+	it("advances from actual progress beyond the target (overachieve)", () => {
+		// target was 100–104, student reached 108 → next day 109–118
+		expect(nextPageWindow({ startPage: 100, dailyAmount: 10 }, 108)).toEqual({
+			startPage: 109,
+			endPage: 118,
+		});
+	});
+
+	it("carries a shortfall forward without skipping pages", () => {
+		// window 100–109, student reached only 102 → next day 103–112
+		expect(nextPageWindow({ startPage: 100, dailyAmount: 10 }, 102)).toEqual({
+			startPage: 103,
+			endPage: 112,
+		});
+	});
+});
+
+describe("review-cycle lastReachedPage", () => {
+	it("prefers actual progress", () => {
+		expect(lastReachedPage(108, 100, 104)).toBe(108);
+		expect(lastReachedPage(102, 100, 104)).toBe(102);
+	});
+
+	it("re-issues the same window on a fully-missed day (startPage-1)", () => {
+		// no progress on window 100–109 → reached 99 → nextPageWindow restarts 100–109
+		expect(lastReachedPage(null, 100, 109)).toBe(99);
+		expect(nextPageWindow({ startPage: 100, dailyAmount: 10 }, 99)).toEqual({
+			startPage: 100,
+			endPage: 109,
+		});
+	});
+
+	it("falls back to endPage for verses/legacy rows", () => {
+		expect(lastReachedPage(null, null, 50)).toBe(50);
 	});
 });
