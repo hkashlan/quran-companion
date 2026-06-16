@@ -475,15 +475,43 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			dailyUnit: data.rangeMode,
 			isActive: true,
 		};
+		let planId: string;
+		let updated: boolean;
 		if (existing[0]) {
 			await db
 				.update(reviewPlans)
 				.set(values)
 				.where(eq(reviewPlans.id, existing[0].id));
-			return { ok: true, updated: true };
+			planId = existing[0].id;
+			updated = true;
+		} else {
+			const [row] = await db
+				.insert(reviewPlans)
+				.values(values)
+				.returning({ id: reviewPlans.id });
+			planId = row.id;
+			updated = false;
 		}
-		await db.insert(reviewPlans).values(values);
-		return { ok: true, updated: false };
+
+		// Create today's review immediately (don't wait for the daily cron), so the
+		// student sees it right after the plan is assigned.
+		const { ensureTodayReview } = await import("./scheduler.ts");
+		await ensureTodayReview(
+			{
+				id: planId,
+				studentId: values.studentId,
+				teacherId: values.teacherId,
+				startSurahNumber: values.startSurahNumber,
+				startVerse: values.startVerse,
+				endSurahNumber: values.endSurahNumber,
+				endVerse: values.endVerse,
+				startPage: values.startPage,
+				dailyAmount: values.dailyAmount,
+				rangeMode: values.rangeMode,
+			},
+			today(),
+		);
+		return { ok: true, updated };
 	});
 
 // ── Student-initiated plan changes (with teacher approval) ──

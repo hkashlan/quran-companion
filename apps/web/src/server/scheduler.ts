@@ -25,6 +25,113 @@ import { sendPush } from "./push.ts";
  *
  * Returns a summary for the cron response/logs.
  */
+export type PlanForReview = {
+	id: string;
+	studentId: string;
+	teacherId: string;
+	startSurahNumber: number;
+	startVerse: number;
+	endSurahNumber: number;
+	endVerse: number;
+	startPage: number | null;
+	dailyAmount: number;
+	rangeMode: string;
+};
+
+/**
+ * Create today's review for a plan if one doesn't already exist, advancing the
+ * window from the plan's last review (or the plan start for the first one), and
+ * notify the student. Returns true if a review was created. Shared by the daily
+ * cron and by assignReviewPlan (so a freshly-assigned plan gets today's review
+ * immediately instead of waiting for the next cron run).
+ */
+export async function ensureTodayReview(
+	plan: PlanForReview,
+	today: string,
+): Promise<boolean> {
+	const existingToday = await db
+		.select({ id: reviews.id })
+		.from(reviews)
+		.where(
+			and(eq(reviews.reviewPlanId, plan.id), eq(reviews.assignedDate, today)),
+		)
+		.limit(1);
+	if (existingToday.length > 0) return false;
+
+	const last = await db
+		.select({
+			surahNumber: reviews.surahNumber,
+			endSurahNumber: reviews.endSurahNumber,
+			verseTo: reviews.verseTo,
+			startPage: reviews.startPage,
+			endPage: reviews.endPage,
+			progressPage: reviews.progressPage,
+		})
+		.from(reviews)
+		.where(eq(reviews.reviewPlanId, plan.id))
+		.orderBy(desc(reviews.createdAt))
+		.limit(1);
+
+	let body: string;
+	if (plan.rangeMode === "pages") {
+		const { startPage, endPage } = nextPageWindow(
+			{ startPage: plan.startPage ?? 1, dailyAmount: plan.dailyAmount },
+			lastReachedPage(
+				last[0]?.progressPage ?? null,
+				last[0]?.startPage ?? null,
+				last[0]?.endPage ?? null,
+			),
+		);
+		await db.insert(reviews).values({
+			studentId: plan.studentId,
+			teacherId: plan.teacherId,
+			reviewPlanId: plan.id,
+			rangeMode: "pages",
+			startPage,
+			endPage,
+			assignedDate: today,
+			status: "pending",
+		});
+		body = `ص ${startPage}–${endPage}`;
+	} else {
+		const { start, end } = nextReviewWindow(plan, last[0] ?? null);
+		const surahName = getSurahName(start.surah, "ar");
+		const endSurahName = getSurahName(end.surah, "ar");
+		await db.insert(reviews).values({
+			studentId: plan.studentId,
+			teacherId: plan.teacherId,
+			reviewPlanId: plan.id,
+			rangeMode: plan.rangeMode,
+			surahNumber: start.surah,
+			surahName,
+			verseFrom: start.verse,
+			endSurahNumber: end.surah,
+			endSurahName,
+			verseTo: end.verse,
+			assignedDate: today,
+			status: "pending",
+		});
+		body = `${surahName}: ${start.verse}–${end.verse}`;
+	}
+
+	const title = "مراجعة جديدة";
+	// dedupeKey is unique so a retried run doesn't double-send (or crash).
+	await db
+		.insert(notificationDeliveries)
+		.values({
+			userId: plan.studentId,
+			eventType: "review_assigned",
+			title,
+			body,
+			status: "sent",
+			dedupeKey: `review_assigned:${plan.id}:${today}`,
+			sentAt: new Date(),
+		})
+		.onConflictDoNothing({ target: notificationDeliveries.dedupeKey });
+	await sendPush(plan.studentId, { title, body, data: { url: "/student" } });
+	return true;
+}
+
 export async function runDailyScheduler(today: string) {
 	const plans = await db
 		.select({
@@ -75,95 +182,11 @@ export async function runDailyScheduler(today: string) {
 			.returning({ id: reviews.id });
 		missed += overdue.length;
 
-		// 2. skip if today's review already exists
-		const existingToday = await db
-			.select({ id: reviews.id })
-			.from(reviews)
-			.where(
-				and(eq(reviews.reviewPlanId, plan.id), eq(reviews.assignedDate, today)),
-			)
-			.limit(1);
-		if (existingToday.length > 0) continue;
-
-		// last review for this plan → advance the window
-		const last = await db
-			.select({
-				surahNumber: reviews.surahNumber,
-				endSurahNumber: reviews.endSurahNumber,
-				verseTo: reviews.verseTo,
-				startPage: reviews.startPage,
-				endPage: reviews.endPage,
-				progressPage: reviews.progressPage,
-			})
-			.from(reviews)
-			.where(eq(reviews.reviewPlanId, plan.id))
-			.orderBy(desc(reviews.createdAt))
-			.limit(1);
-
-		// 2. create the next review — page cursor for pages plans, else verse window
-		let body: string;
-		if (plan.rangeMode === "pages") {
-			// Advance from the page the student actually reached (progress), not the
-			// assigned window end — so overachieving jumps ahead and a shortfall is
-			// continued (not skipped) the next day.
-			const { startPage, endPage } = nextPageWindow(
-				{ startPage: plan.startPage ?? 1, dailyAmount: plan.dailyAmount },
-				lastReachedPage(
-					last[0]?.progressPage ?? null,
-					last[0]?.startPage ?? null,
-					last[0]?.endPage ?? null,
-				),
-			);
-			await db.insert(reviews).values({
-				studentId: plan.studentId,
-				teacherId: plan.teacherId,
-				reviewPlanId: plan.id,
-				rangeMode: "pages",
-				startPage,
-				endPage,
-				assignedDate: today,
-				status: "pending",
-			});
-			body = `ص ${startPage}–${endPage}`;
-		} else {
-			const { start, end } = nextReviewWindow(plan, last[0] ?? null);
-			const surahName = getSurahName(start.surah, "ar");
-			const endSurahName = getSurahName(end.surah, "ar");
-			await db.insert(reviews).values({
-				studentId: plan.studentId,
-				teacherId: plan.teacherId,
-				reviewPlanId: plan.id,
-				rangeMode: plan.rangeMode,
-				surahNumber: start.surah,
-				surahName,
-				verseFrom: start.verse,
-				endSurahNumber: end.surah,
-				endSurahName,
-				verseTo: end.verse,
-				assignedDate: today,
-				status: "pending",
-			});
-			body = `${surahName}: ${start.verse}–${end.verse}`;
+		// 2 + 3. create today's review (if missing) and notify.
+		if (await ensureTodayReview(plan, today)) {
+			created += 1;
+			notified += 1;
 		}
-		created += 1;
-
-		// 3. notify
-		const title = "مراجعة جديدة";
-		// dedupeKey is unique so a retried run doesn't double-send (or crash).
-		await db
-			.insert(notificationDeliveries)
-			.values({
-				userId: plan.studentId,
-				eventType: "review_assigned",
-				title,
-				body,
-				status: "sent",
-				dedupeKey: `review_assigned:${plan.id}:${today}`,
-				sentAt: new Date(),
-			})
-			.onConflictDoNothing({ target: notificationDeliveries.dedupeKey });
-		await sendPush(plan.studentId, { title, body, data: { url: "/student" } });
-		notified += 1;
 	}
 
 	return { plans: plans.length, created, missed, notified };
