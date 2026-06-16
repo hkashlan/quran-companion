@@ -2,12 +2,16 @@ import { useMemo, useState } from "react";
 import { BarChart, type Point } from "@/components/Chart";
 import { Card, StatCard } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { reviewRange } from "@/lib/review-range";
 
 type ReviewRow = {
 	id: string;
-	surahName: string;
-	verseFrom: number;
-	verseTo: number;
+	surahName: string | null;
+	verseFrom: number | null;
+	verseTo: number | null;
+	rangeMode: string;
+	startPage: number | null;
+	endPage: number | null;
 	assignedDate: string;
 	status: string;
 	pointsEarned: number;
@@ -136,7 +140,7 @@ export function ReviewProgress({
 										className={`h-2 w-2 rounded-full ${r.status === "completed" ? "bg-success" : r.status === "missed" ? "bg-error" : "bg-text-light"}`}
 									/>
 									<span className="flex-1 font-semibold text-text">
-										{r.surahName}: {r.verseFrom}–{r.verseTo}
+										{reviewRange(r)}
 									</span>
 									<span className="text-text-light">{r.assignedDate}</span>
 									{r.pointsEarned !== 0 ? (

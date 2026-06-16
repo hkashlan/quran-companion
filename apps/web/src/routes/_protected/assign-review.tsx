@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import {
 	NumberPicker,
+	Segmented,
 	SurahPicker,
 	surahVerseCount,
 } from "@/components/pickers";
@@ -26,6 +27,9 @@ function AssignReview() {
 	const { studentId } = Route.useSearch();
 	const { student, plan } = Route.useLoaderData();
 
+	const [mode, setMode] = useState<"verses" | "pages">(
+		(plan?.rangeMode as "verses" | "pages") ?? "verses",
+	);
 	const [startSurah, setStartSurah] = useState(plan?.startSurahNumber ?? 1);
 	const [startVerse, setStartVerse] = useState(plan?.startVerse ?? 1);
 	const [diffEnd, setDiffEnd] = useState(
@@ -35,6 +39,7 @@ function AssignReview() {
 		plan?.endSurahNumber ?? plan?.startSurahNumber ?? 1,
 	);
 	const [endVerse, setEndVerse] = useState(plan?.endVerse ?? 7);
+	const [startPage, setStartPage] = useState(String(plan?.startPage ?? 1));
 	const [daily, setDaily] = useState(String(plan?.dailyAmount ?? 10));
 	const [saving, setSaving] = useState(false);
 
@@ -43,15 +48,26 @@ function AssignReview() {
 	async function save() {
 		setSaving(true);
 		await assignReviewPlan({
-			data: {
-				studentId,
-				rangeMode: "verses",
-				startSurahNumber: startSurah,
-				startVerse,
-				endSurahNumber: effectiveEnd,
-				endVerse,
-				dailyAmount: Math.max(1, Number.parseInt(daily, 10) || 1),
-			},
+			data:
+				mode === "pages"
+					? {
+							studentId,
+							rangeMode: "pages",
+							startPage: Math.min(
+								604,
+								Math.max(1, Number.parseInt(startPage, 10) || 1),
+							),
+							dailyAmount: Math.max(1, Number.parseInt(daily, 10) || 1),
+						}
+					: {
+							studentId,
+							rangeMode: "verses",
+							startSurahNumber: startSurah,
+							startVerse,
+							endSurahNumber: effectiveEnd,
+							endVerse,
+							dailyAmount: Math.max(1, Number.parseInt(daily, 10) || 1),
+						},
 		});
 		setSaving(false);
 		navigate({ to: "/teacher" });
@@ -72,48 +88,75 @@ function AssignReview() {
 				</h1>
 			</header>
 
-			<SurahPicker
-				label={t("assign.startSurah")}
-				value={startSurah}
-				onChange={(s) => {
-					setStartSurah(s);
-					setStartVerse((v) => Math.min(v, surahVerseCount(s)));
-				}}
-			/>
-			<NumberPicker
-				label={t("assign.fromVerse")}
-				value={startVerse}
-				min={1}
-				max={surahVerseCount(startSurah)}
-				onChange={setStartVerse}
+			<Segmented
+				value={mode}
+				onChange={setMode}
+				options={[
+					{ value: "verses", label: t("assign.modeVerses") },
+					{ value: "pages", label: t("assign.modePages") },
+				]}
 			/>
 
-			<label className="flex items-center gap-2 px-1 text-[14px] text-text">
-				<input
-					type="checkbox"
-					checked={diffEnd}
-					onChange={(e) => setDiffEnd(e.target.checked)}
-				/>
-				{t("assign.differentEndSurah")}
-			</label>
+			{mode === "pages" ? (
+				<div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+					<span className="text-[14px] font-semibold text-text">
+						{t("assign.startPage")}
+					</span>
+					<input
+						type="number"
+						min={1}
+						max={604}
+						value={startPage}
+						onChange={(e) => setStartPage(e.target.value)}
+						className="w-24 rounded-md border border-border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none"
+					/>
+				</div>
+			) : (
+				<>
+					<SurahPicker
+						label={t("assign.startSurah")}
+						value={startSurah}
+						onChange={(s) => {
+							setStartSurah(s);
+							setStartVerse((v) => Math.min(v, surahVerseCount(s)));
+						}}
+					/>
+					<NumberPicker
+						label={t("assign.fromVerse")}
+						value={startVerse}
+						min={1}
+						max={surahVerseCount(startSurah)}
+						onChange={setStartVerse}
+					/>
 
-			{diffEnd ? (
-				<SurahPicker
-					label={t("assign.endSurah")}
-					value={endSurah}
-					onChange={(s) => {
-						setEndSurah(s);
-						setEndVerse((v) => Math.min(v, surahVerseCount(s)));
-					}}
-				/>
-			) : null}
-			<NumberPicker
-				label={t("assign.toVerse")}
-				value={endVerse}
-				min={1}
-				max={surahVerseCount(effectiveEnd)}
-				onChange={setEndVerse}
-			/>
+					<label className="flex items-center gap-2 px-1 text-[14px] text-text">
+						<input
+							type="checkbox"
+							checked={diffEnd}
+							onChange={(e) => setDiffEnd(e.target.checked)}
+						/>
+						{t("assign.differentEndSurah")}
+					</label>
+
+					{diffEnd ? (
+						<SurahPicker
+							label={t("assign.endSurah")}
+							value={endSurah}
+							onChange={(s) => {
+								setEndSurah(s);
+								setEndVerse((v) => Math.min(v, surahVerseCount(s)));
+							}}
+						/>
+					) : null}
+					<NumberPicker
+						label={t("assign.toVerse")}
+						value={endVerse}
+						min={1}
+						max={surahVerseCount(effectiveEnd)}
+						onChange={setEndVerse}
+					/>
+				</>
+			)}
 
 			<div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
 				<span className="text-[14px] font-semibold text-text">
@@ -128,7 +171,9 @@ function AssignReview() {
 						className="w-24 rounded-md border border-border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none"
 					/>
 					<span className="text-[13px] text-text-secondary">
-						{t("assign.dailyVerses")}
+						{mode === "pages"
+							? t("assign.dailyPages")
+							: t("assign.dailyVerses")}
 					</span>
 				</div>
 			</div>

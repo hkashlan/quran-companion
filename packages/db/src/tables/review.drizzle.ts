@@ -30,17 +30,20 @@ export const reviews = pgTable(
 			.notNull()
 			.references(() => user.id),
 		reviewPlanId: uuid("review_plan_id").references(() => reviewPlans.id),
-		surahNumber: integer("surah_number").notNull(),
-		surahName: text("surah_name").notNull(),
-		verseFrom: integer("verse_from").notNull(),
+		// Verse-mode position. Nullable: pages-mode reviews store only startPage/endPage.
+		surahNumber: integer("surah_number"),
+		surahName: text("surah_name"),
+		verseFrom: integer("verse_from"),
 		endSurahNumber: integer("end_surah_number"),
 		endSurahName: text("end_surah_name"),
-		verseTo: integer("verse_to").notNull(),
+		verseTo: integer("verse_to"),
 		rangeMode: varchar("range_mode", { length: 10 })
 			.default("verses")
 			.notNull(),
 		startPage: integer("start_page"),
 		endPage: integer("end_page"),
+		// pages-mode: max absolute page the student has actually reached so far; null otherwise
+		progressPage: integer("progress_page"),
 		assignedDate: date("assigned_date").notNull(),
 		completedAt: timestamp("completed_at"),
 		pointsEarned: integer("points_earned").default(0).notNull(),

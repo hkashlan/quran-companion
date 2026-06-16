@@ -36,7 +36,9 @@ function StudentDetail() {
 	}
 
 	const planRange = plan
-		? `${plan.startSurahNumber}:${plan.startVerse} – ${plan.endSurahNumber}:${plan.endVerse}`
+		? plan.rangeMode === "pages"
+			? `ص ${plan.startPage ?? 1}–${plan.endPage ?? 604}`
+			: `${plan.startSurahNumber}:${plan.startVerse} – ${plan.endSurahNumber}:${plan.endVerse}`
 		: null;
 
 	return (

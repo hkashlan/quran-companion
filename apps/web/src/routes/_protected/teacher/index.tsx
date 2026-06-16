@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarPlus, ClipboardList, Users } from "lucide-react";
+import { CalendarPlus, ClipboardList, Plus, Users } from "lucide-react";
 import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { getTeacherHome } from "@/server/queries";
@@ -22,6 +22,13 @@ function TeacherHome() {
 					{data.user.name.slice(0, 1)}
 				</div>
 			</header>
+
+			<Link
+				to="/create-circle"
+				className="flex h-[54px] w-full items-center justify-center gap-2 rounded-lg bg-primary text-[17px] font-semibold text-white transition active:scale-[0.98]"
+			>
+				<Plus size={20} /> {t("circle.create")}
+			</Link>
 
 			<Section title={t("teacher.myCircles")}>
 				{data.circles.map((c) => (

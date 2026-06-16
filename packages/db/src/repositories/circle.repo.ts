@@ -54,6 +54,83 @@ export async function listCirclesForUser(
 	return result;
 }
 
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I
+
+/** 8-char uppercase join code (ambiguous chars excluded). */
+function generateCircleCode(): string {
+	let code = "";
+	for (let i = 0; i < 8; i++) {
+		code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+	}
+	return code;
+}
+
+export type NewCircleSlot = {
+	dayOfWeek: number;
+	startTime: string;
+	endTime: string;
+};
+
+export type NewCircleInput = {
+	ownerTeacherId: string;
+	title: string;
+	description: string | null;
+	location: string | null;
+	reminderHoursBeforeStart: number;
+	slots: NewCircleSlot[];
+};
+
+/**
+ * Create a circle owned by a teacher: generates a unique join code, inserts the
+ * circle, the owner membership, and any weekly time slots. Returns the new circle.
+ */
+export async function createCircle(input: NewCircleInput) {
+	// Find a code not already in use (retry on the rare collision).
+	let code = generateCircleCode();
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const existing = await db
+			.select({ id: learningCircles.id })
+			.from(learningCircles)
+			.where(eq(learningCircles.code, code))
+			.limit(1);
+		if (existing.length === 0) break;
+		code = generateCircleCode();
+	}
+
+	return db.transaction(async (tx) => {
+		const [circle] = await tx
+			.insert(learningCircles)
+			.values({
+				ownerTeacherId: input.ownerTeacherId,
+				title: input.title,
+				description: input.description,
+				location: input.location,
+				reminderHoursBeforeStart: input.reminderHoursBeforeStart,
+				code,
+			})
+			.returning();
+
+		await tx.insert(circleMemberships).values({
+			circleId: circle.id,
+			userId: input.ownerTeacherId,
+			role: "owner",
+		});
+
+		if (input.slots.length > 0) {
+			await tx.insert(learningCircleSlots).values(
+				input.slots.map((s) => ({
+					circleId: circle.id,
+					dayOfWeek: s.dayOfWeek,
+					startTime: s.startTime,
+					endTime: s.endTime,
+				})),
+			);
+		}
+
+		return circle;
+	});
+}
+
 /** Look up a circle by its public join code. */
 export async function findCircleByCode(code: string) {
 	const rows = await db

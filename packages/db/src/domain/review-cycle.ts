@@ -60,8 +60,8 @@ export type PlanLike = {
 
 export type LastReviewEnd = {
 	endSurahNumber: number | null;
-	surahNumber: number;
-	verseTo: number;
+	surahNumber: number | null;
+	verseTo: number | null;
 } | null;
 
 /**
@@ -80,7 +80,9 @@ export function nextStartPosition(
 		surah: plan.endSurahNumber,
 		verse: plan.endVerse,
 	};
-	if (prev === null) return planStart;
+	// No usable previous verse position (null, or a pages-mode review) → start fresh.
+	if (prev === null || prev.surahNumber === null || prev.verseTo === null)
+		return planStart;
 
 	const prevEnd: VersePosition = {
 		surah: prev.endSurahNumber ?? prev.surahNumber,
@@ -107,4 +109,58 @@ export function nextReviewWindow(
 		verse: plan.endVerse,
 	});
 	return { start, end };
+}
+
+/** Total pages in the standard Madani mushaf. */
+export const MUSHAF_PAGES = 604;
+
+export type PagePlanLike = {
+	startPage: number;
+	dailyAmount: number;
+};
+
+/**
+ * Page-mode cursor: a continuous run from the plan's start page to page 604,
+ * wrapping back to the start page once the end is reached. The day's window is
+ * clamped at 604 (it never spans the 604→start boundary); the next day restarts
+ * at the start page. `lastEndPage` is the end of the most recent generated
+ * review for this plan, or null for the first review.
+ */
+export function nextPageWindow(
+	plan: PagePlanLike,
+	lastEndPage: number | null,
+): { startPage: number; endPage: number } {
+	const start =
+		lastEndPage == null || lastEndPage >= MUSHAF_PAGES
+			? plan.startPage
+			: lastEndPage + 1;
+	const endPage = Math.min(
+		start + Math.max(1, plan.dailyAmount) - 1,
+		MUSHAF_PAGES,
+	);
+	return { startPage: start, endPage };
+}
+
+/** A start-page change to a later page (skipping ahead) needs teacher approval. */
+export function isStartAdvance(
+	currentStartPage: number,
+	proposedStartPage: number,
+): boolean {
+	return proposedStartPage > currentStartPage;
+}
+
+/**
+ * The page the student effectively reached on a review, used to seed the next
+ * day's window. Prefers actual `progressPage`; for a fully-missed day (no
+ * progress) returns `startPage - 1` so the same window is re-issued rather than
+ * skipped; falls back to `endPage` for verses/legacy rows.
+ */
+export function lastReachedPage(
+	progressPage: number | null,
+	startPage: number | null,
+	endPage: number | null,
+): number | null {
+	if (progressPage != null) return progressPage;
+	if (startPage != null) return startPage - 1;
+	return endPage;
 }
