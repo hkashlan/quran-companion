@@ -449,7 +449,7 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			"@quran/db/tables/review-plan.drizzle"
 		);
 		const existing = await db
-			.select({ id: reviewPlans.id })
+			.select({ id: reviewPlans.id, startPage: reviewPlans.startPage })
 			.from(reviewPlans)
 			.where(
 				and(
@@ -459,6 +459,11 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			)
 			.limit(1);
 		const isPages = data.rangeMode === "pages";
+		// Re-anchor the next review when a teacher edit changes the start page.
+		const startPageChanged =
+			isPages &&
+			!!existing[0] &&
+			(existing[0].startPage ?? null) !== (data.startPage ?? 1);
 		const values = {
 			studentId: data.studentId,
 			teacherId: teacher.id,
@@ -474,6 +479,7 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			dailyAmount: data.dailyAmount,
 			dailyUnit: data.rangeMode,
 			isActive: true,
+			cursorReset: startPageChanged,
 		};
 		let planId: string;
 		let updated: boolean;
@@ -508,6 +514,7 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				startPage: values.startPage,
 				dailyAmount: values.dailyAmount,
 				rangeMode: values.rangeMode,
+				cursorReset: values.cursorReset,
 			},
 			today(),
 		);
@@ -637,9 +644,10 @@ export const requestPlanChange = createServerFn({ method: "POST" })
 				return { ok: false as const, error: "invalid" as const };
 			needsApproval = isStartAdvance(plan.startPage ?? 1, proposed); // later → approval
 			if (!needsApproval) {
+				// cursorReset: the next review re-anchors to the new start page.
 				await db
 					.update(reviewPlans)
-					.set({ startPage: proposed })
+					.set({ startPage: proposed, cursorReset: true })
 					.where(eq(reviewPlans.id, plan.id));
 				return { ok: true as const, applied: true as const };
 			}
@@ -743,7 +751,7 @@ export const respondPlanChange = createServerFn({ method: "POST" })
 			else if (req.field === "start_page" && req.proposedStartPage != null)
 				await db
 					.update(reviewPlans)
-					.set({ startPage: req.proposedStartPage })
+					.set({ startPage: req.proposedStartPage, cursorReset: true })
 					.where(eq(reviewPlans.id, req.reviewPlanId));
 			await notifyPlanChange(
 				req.studentId,

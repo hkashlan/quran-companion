@@ -1,0 +1,1 @@
+ALTER TABLE "review_plans" ADD COLUMN "cursor_reset" boolean DEFAULT false NOT NULL;

@@ -36,6 +36,7 @@ export type PlanForReview = {
 	startPage: number | null;
 	dailyAmount: number;
 	rangeMode: string;
+	cursorReset: boolean;
 };
 
 /**
@@ -74,13 +75,18 @@ export async function ensureTodayReview(
 
 	let body: string;
 	if (plan.rangeMode === "pages") {
+		// On a start-page change the cursor is reset: re-anchor to the plan's
+		// startPage (pass null) instead of continuing from the last review's progress.
+		const reached = plan.cursorReset
+			? null
+			: lastReachedPage(
+					last[0]?.progressPage ?? null,
+					last[0]?.startPage ?? null,
+					last[0]?.endPage ?? null,
+				);
 		const { startPage, endPage } = nextPageWindow(
 			{ startPage: plan.startPage ?? 1, dailyAmount: plan.dailyAmount },
-			lastReachedPage(
-				last[0]?.progressPage ?? null,
-				last[0]?.startPage ?? null,
-				last[0]?.endPage ?? null,
-			),
+			reached,
 		);
 		await db.insert(reviews).values({
 			studentId: plan.studentId,
@@ -92,6 +98,12 @@ export async function ensureTodayReview(
 			assignedDate: today,
 			status: "pending",
 		});
+		if (plan.cursorReset) {
+			await db
+				.update(reviewPlans)
+				.set({ cursorReset: false })
+				.where(eq(reviewPlans.id, plan.id));
+		}
 		body = `ص ${startPage}–${endPage}`;
 	} else {
 		const { start, end } = nextReviewWindow(plan, last[0] ?? null);
@@ -145,6 +157,7 @@ export async function runDailyScheduler(today: string) {
 			startPage: reviewPlans.startPage,
 			dailyAmount: reviewPlans.dailyAmount,
 			rangeMode: reviewPlans.rangeMode,
+			cursorReset: reviewPlans.cursorReset,
 		})
 		.from(reviewPlans)
 		.where(eq(reviewPlans.isActive, true));

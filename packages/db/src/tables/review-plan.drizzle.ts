@@ -35,6 +35,10 @@ export const reviewPlans = pgTable(
 			.default("verses")
 			.notNull(),
 		isActive: boolean("is_active").default(true).notNull(),
+		// Set when the start page changes (pages mode): the next generated review
+		// re-anchors to startPage instead of continuing from progress. Cleared once
+		// that review is created.
+		cursorReset: boolean("cursor_reset").default(false).notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [
