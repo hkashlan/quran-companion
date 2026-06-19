@@ -29,7 +29,8 @@ function destFor(
 		case "plan_change_rejected":
 			return "/student/plan";
 		case "plan_change_requested":
-			// Teacher: the screen where the pending plan change can be approved.
+		case "join_requested":
+			// Teacher: the screen where a pending request can be approved/rejected.
 			return "/teacher/requests";
 		case "plan_changed":
 			return "/teacher";

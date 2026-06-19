@@ -33,6 +33,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "tsx scripts/migrate-prod.ts",
+    "db:reset": "tsx scripts/reset.ts",
     "db:push": "drizzle-kit push",
     "db:barrels": "tsx scripts/generate-barrels.ts",
     "db:migrate:pages": "tsx --env-file=../../.env scripts/migrate-verses-to-pages.ts",

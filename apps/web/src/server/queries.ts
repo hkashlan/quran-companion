@@ -612,6 +612,7 @@ async function notifyPlanChange(
 	title: string,
 	body: string,
 	dedupeKey: string,
+	url = "/",
 ) {
 	const { notificationDeliveries } = await import(
 		"@quran/db/tables/notification-delivery.drizzle"
@@ -625,7 +626,7 @@ async function notifyPlanChange(
 		dedupeKey,
 		sentAt: new Date(),
 	});
-	await sendPush(userId, { title, body, data: { url: "/" } });
+	await sendPush(userId, { title, body, data: { url } });
 }
 
 /** Student: their own active plan + any pending change request (for the editor). */
@@ -1108,12 +1109,27 @@ export const joinCircleByCode = createServerFn({ method: "POST" })
 			};
 		}
 
-		await db.insert(joinRequests).values({
-			userId: u.id,
-			circleId: circle.id,
-			requestedRole: u.role === "teacher" ? "teacher" : "student",
-			status: "pending",
-		});
+		const [request] = await db
+			.insert(joinRequests)
+			.values({
+				userId: u.id,
+				circleId: circle.id,
+				requestedRole: u.role === "teacher" ? "teacher" : "student",
+				status: "pending",
+			})
+			.returning({ id: joinRequests.id });
+
+		// Notify the circle owner so they can approve/reject from the requests
+		// screen (and straight from the push notification).
+		await notifyPlanChange(
+			circle.ownerTeacherId,
+			"join_requested",
+			"طلب انضمام جديد",
+			`${u.name} يطلب الانضمام إلى ${circle.title}`,
+			`join_requested:${request.id}`,
+			"/teacher/requests",
+		);
+
 		return { ok: true as const, circleTitle: circle.title };
 	});
 
