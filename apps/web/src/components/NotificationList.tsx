@@ -24,6 +24,7 @@ function destFor(
 ): "/student" | "/student/plan" | "/teacher/requests" | "/teacher" | null {
 	switch (eventType) {
 		case "review_assigned":
+		case "review_reminder":
 			return "/student";
 		case "plan_change_approved":
 		case "plan_change_rejected":

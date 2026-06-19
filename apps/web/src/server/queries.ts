@@ -293,6 +293,98 @@ export const getTeacherHome = createServerFn({ method: "GET" }).handler(
 	},
 );
 
+/**
+ * Teacher: today's progress for every student in my circles — pages they were
+ * assigned to read today (target) and how far they've reached (done). Powers the
+ * "Today" section on the leaderboard screen (nudge + jump-to-plan live there).
+ */
+export const getTeacherToday = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const circles = await listCirclesForUser(u.id);
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+
+		// One pass over today's reviews for all my students, newest-first so the
+		// first row we see per student is the current one.
+		const todayStr = today();
+		const todayReviews = await db
+			.select({
+				studentId: reviews.studentId,
+				startPage: reviews.startPage,
+				endPage: reviews.endPage,
+				progressPage: reviews.progressPage,
+				status: reviews.status,
+			})
+			.from(reviews)
+			.where(
+				and(eq(reviews.teacherId, u.id), eq(reviews.assignedDate, todayStr)),
+			)
+			.orderBy(desc(reviews.createdAt));
+		const reviewByStudent = new Map<string, (typeof todayReviews)[number]>();
+		for (const r of todayReviews) {
+			if (!reviewByStudent.has(r.studentId)) reviewByStudent.set(r.studentId, r);
+		}
+
+		const withStudents = await Promise.all(
+			circles.map(async (c) => {
+				const members = await db
+					.select({ id: userTable.id, name: userTable.name })
+					.from(circleMemberships)
+					.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+					.where(
+						and(
+							eq(circleMemberships.circleId, c.id),
+							eq(circleMemberships.role, "student"),
+						),
+					);
+				const students = members.map((s) => {
+					const r = reviewByStudent.get(s.id);
+					if (!r || r.startPage == null || r.endPage == null) {
+						return { id: s.id, name: s.name, today: null };
+					}
+					const target = Math.max(1, r.endPage - r.startPage + 1);
+					const reached =
+						r.progressPage != null
+							? Math.max(r.progressPage - r.startPage + 1, 0)
+							: 0;
+					const done = Math.min(reached, target);
+					// Pages read past today's assigned range (overachievement).
+					const over = Math.max(reached - target, 0);
+					return {
+						id: s.id,
+						name: s.name,
+						today: { target, done, over, status: r.status },
+					};
+				});
+				return { id: c.id, title: c.title, students };
+			}),
+		);
+		return { circles: withStudents };
+	},
+);
+
+/**
+ * Teacher: nudge a student with a push reminder to do today's review. Always
+ * allowed (the dedupe key is per-send), so a teacher can re-remind if needed.
+ */
+export const nudgeStudent = createServerFn({ method: "POST" })
+	.validator(z.object({ studentId: z.string() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		await notifyPlanChange(
+			data.studentId,
+			"review_reminder",
+			"تذكير بالمراجعة",
+			`${u.name} يذكّرك بمراجعة اليوم`,
+			`review_reminder:${data.studentId}:${Date.now()}`,
+			"/student",
+		);
+		return { ok: true as const };
+	});
+
 /** Teacher: pending join requests across circles I own. */
 export const getJoinRequests = createServerFn({ method: "GET" }).handler(
 	async () => {

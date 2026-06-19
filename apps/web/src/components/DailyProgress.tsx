@@ -7,12 +7,19 @@ type ActiveReview = {
 };
 
 /** Circular progress ring with the percentage in the centre. */
-function Ring({ pct }: { pct: number }) {
-	const size = 76;
-	const stroke = 8;
+export function Ring({
+	pct,
+	size = 76,
+	stroke = 8,
+}: {
+	pct: number;
+	size?: number;
+	stroke?: number;
+}) {
 	const r = (size - stroke) / 2;
 	const c = 2 * Math.PI * r;
 	const offset = c * (1 - pct);
+	const fontSize = Math.max(10, Math.round(size * 0.2));
 	return (
 		<div className="relative shrink-0" style={{ width: size, height: size }}>
 			<svg width={size} height={size} className="-rotate-90">
@@ -39,7 +46,10 @@ function Ring({ pct }: { pct: number }) {
 					strokeDashoffset={offset}
 				/>
 			</svg>
-			<span className="absolute inset-0 flex items-center justify-center text-[15px] font-bold text-text">
+			<span
+				className="absolute inset-0 flex items-center justify-center font-bold text-text"
+				style={{ fontSize }}
+			>
 				{Math.round(pct * 100)}%
 			</span>
 		</div>
