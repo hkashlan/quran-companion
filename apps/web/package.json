@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "seed": "node --env-file=../../.env --import tsx/esm scripts/seed.ts",
     "reset:today": "node --env-file=../../.env --import tsx/esm scripts/reset-today.ts --days=3",
+    "delete:user": "node --env-file=../../.env --import tsx/esm scripts/delete-user.ts",
     "verify": "node --import tsx/esm scripts/verify.ts",
     "icons": "node --import tsx/esm scripts/generate-icons.ts",
     "auth:generate": "pnpm dlx @better-auth/cli generate --config ./src/lib/auth.ts --output ../../packages/db/src/tables/auth.drizzle.ts",
