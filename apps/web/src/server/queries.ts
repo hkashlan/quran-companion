@@ -3,6 +3,7 @@ import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
 import {
 	createCircle,
 	findCircleByCode,
+	leaveCircle,
 	listCirclesForUser,
 } from "@quran/db/repositories/circle";
 import {
@@ -1114,4 +1115,14 @@ export const joinCircleByCode = createServerFn({ method: "POST" })
 			status: "pending",
 		});
 		return { ok: true as const, circleTitle: circle.title };
+	});
+
+export const leaveCircleFn = createServerFn({ method: "POST" })
+	.validator(z.object({ circleId: z.string().uuid() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const left = await leaveCircle(u.id, data.circleId);
+		return left
+			? { ok: true as const }
+			: { ok: false as const, error: "not_member" };
 	});

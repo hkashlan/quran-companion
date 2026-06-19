@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarPlus, ClipboardList, Plus, Users } from "lucide-react";
+import { CalendarPlus, ClipboardList, Plus, Share2, Users } from "lucide-react";
+import { useState } from "react";
 import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { getTeacherHome } from "@/server/queries";
@@ -8,6 +9,50 @@ export const Route = createFileRoute("/_protected/teacher/")({
 	loader: async () => getTeacherHome(),
 	component: TeacherHome,
 });
+
+/**
+ * Share a circle's join link. Uses the native share sheet (great for sending via
+ * WhatsApp/messages on mobile) and falls back to copying the link to clipboard.
+ */
+function ShareButton({ code }: { code: string }) {
+	const { t } = useI18n();
+	const [copied, setCopied] = useState(false);
+
+	async function share() {
+		const url = `${window.location.origin}/join/${code}`;
+		// Prefer the native share sheet on mobile; ignore an in-progress/cancelled
+		// share rather than surprising the user with a clipboard copy.
+		if (navigator.share) {
+			try {
+				await navigator.share({
+					title: t("appName"),
+					text: t("teacher.shareText"),
+					url,
+				});
+			} catch {
+				// User cancelled or share rejected — do nothing.
+			}
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(url);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			// Clipboard blocked — nothing more we can do silently.
+		}
+	}
+
+	return (
+		<button
+			type="button"
+			onClick={share}
+			className="flex items-center gap-1 rounded-md bg-primary-light px-2 py-1 text-[11px] font-semibold text-primary"
+		>
+			<Share2 size={13} /> {copied ? t("teacher.linkCopied") : t("teacher.share")}
+		</button>
+	);
+}
 
 function TeacherHome() {
 	const { t } = useI18n();
@@ -33,11 +78,14 @@ function TeacherHome() {
 			<Section title={t("teacher.myCircles")}>
 				{data.circles.map((c) => (
 					<Card key={c.id} className="flex flex-col gap-2">
-						<div className="flex items-center justify-between">
+						<div className="flex items-center justify-between gap-2">
 							<span className="text-[15px] font-bold text-text">{c.title}</span>
-							<span className="text-[12px] text-text-secondary">
-								{t("teacher.code")}: {c.code}
-							</span>
+							<div className="flex items-center gap-2">
+								<span className="text-[12px] text-text-secondary">
+									{t("teacher.code")}: {c.code}
+								</span>
+								<ShareButton code={c.code} />
+							</div>
 						</div>
 						{c.description ? (
 							<span className="text-[13px] text-text-secondary">

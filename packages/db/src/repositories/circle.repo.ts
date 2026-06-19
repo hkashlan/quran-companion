@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "../db.ts";
 import { circleMemberships } from "../tables/circle-membership.drizzle.ts";
@@ -139,6 +139,28 @@ export async function findCircleByCode(code: string) {
 		.where(eq(learningCircles.code, code.toUpperCase()))
 		.limit(1);
 	return rows[0] ?? null;
+}
+
+/**
+ * Remove a user's membership from a circle. Owners can't leave their own circle
+ * (they'd delete it instead), so owner memberships are left untouched. Returns
+ * true if a membership was actually removed.
+ */
+export async function leaveCircle(
+	userId: string,
+	circleId: string,
+): Promise<boolean> {
+	const deleted = await db
+		.delete(circleMemberships)
+		.where(
+			and(
+				eq(circleMemberships.userId, userId),
+				eq(circleMemberships.circleId, circleId),
+				ne(circleMemberships.role, "owner"),
+			),
+		)
+		.returning({ id: circleMemberships.id });
+	return deleted.length > 0;
 }
 
 export async function getCircleSlots(circleId: string) {

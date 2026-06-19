@@ -3,6 +3,7 @@ import {
 	BookOpen,
 	ChevronLeft,
 	Clock,
+	LogOut,
 	MapPin,
 	Search,
 	SlidersHorizontal,
@@ -15,6 +16,7 @@ import { reviewRange } from "@/lib/review-range";
 import {
 	getStudentHome,
 	joinCircleByCode,
+	leaveCircleFn,
 	submitReview,
 } from "@/server/queries";
 
@@ -131,6 +133,12 @@ function StudentHome() {
 	const [joinMsg, setJoinMsg] = useState<{ text: string; ok: boolean } | null>(
 		null,
 	);
+
+	async function leave(circleId: string) {
+		if (!window.confirm(t("home.leaveConfirm"))) return;
+		await leaveCircleFn({ data: { circleId } });
+		router.invalidate();
+	}
 
 	async function join() {
 		if (!code.trim()) return;
@@ -253,6 +261,13 @@ function StudentHome() {
 										<MapPin size={12} /> {c.location}
 									</span>
 								) : null}
+								<button
+									type="button"
+									onClick={() => leave(c.id)}
+									className="mt-1 flex items-center gap-1 self-start rounded-md px-2 py-1 text-[12px] font-semibold text-error active:bg-error/10"
+								>
+									<LogOut size={13} /> {t("home.leave")}
+								</button>
 							</div>
 						))}
 					</Card>
