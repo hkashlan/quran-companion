@@ -42,15 +42,24 @@ function PagesProgressEditor({ review }: { review: EditableReview }) {
 	const router = useRouter();
 	const start = review.startPage ?? 1;
 	const end = review.endPage ?? start;
-	const [page, setPage] = useState(review.progressPage ?? end);
+	// Keep the raw text so the student can edit freely (clear it, type a couple
+	// of digits) without the value being clamped out from under them on every
+	// keystroke. We validate the parsed number and only enable Save when it's in
+	// range — reaching past the day's target (up to the last mushaf page) is fine.
+	const [text, setText] = useState(String(review.progressPage ?? end));
 	const [saving, setSaving] = useState(false);
 	const [saved, setSaved] = useState(false);
 
+	const parsed = Number.parseInt(text, 10);
+	const valid = /^\d+$/.test(text.trim()) && parsed >= start && parsed <= 604;
+	const showError = text.trim() !== "" && !valid;
+
 	async function save() {
+		if (!valid) return;
 		setSaving(true);
 		setSaved(false);
 		const res = await submitReview({
-			data: { reviewId: review.id, currentPage: page },
+			data: { reviewId: review.id, currentPage: parsed },
 		});
 		setSaving(false);
 		if (res.ok) {
@@ -67,34 +76,40 @@ function PagesProgressEditor({ review }: { review: EditableReview }) {
 			<div className="flex items-center gap-2">
 				<input
 					type="number"
+					inputMode="numeric"
 					min={start}
 					max={604}
-					value={page}
-					onChange={(e) =>
-						setPage(
-							Math.max(
-								start,
-								Math.min(604, Number.parseInt(e.target.value, 10) || start),
-							),
-						)
-					}
-					className="w-24 rounded-md border border-border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none"
+					value={text}
+					onChange={(e) => {
+						setText(e.target.value);
+						setSaved(false);
+					}}
+					aria-invalid={showError}
+					className={`w-24 rounded-md border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none ${
+						showError ? "border-error" : "border-border"
+					}`}
 				/>
 				<Button
 					onClick={save}
 					loading={saving}
-					disabled={page === review.progressPage}
+					disabled={!valid || parsed === review.progressPage}
 				>
 					{t("common.save")}
 				</Button>
 			</div>
-			<span className="text-[12px] text-text-secondary">
-				{t("submit.pagesHint", {
-					from: start,
-					to: end,
-					reached: review.progressPage ?? "—",
-				})}
-			</span>
+			{showError ? (
+				<p className="text-[12px] font-semibold text-error">
+					{t("submit.pageRangeError", { from: start, to: 604 })}
+				</p>
+			) : (
+				<span className="text-[12px] text-text-secondary">
+					{t("submit.pagesHint", {
+						from: start,
+						to: end,
+						reached: review.progressPage ?? "—",
+					})}
+				</span>
+			)}
 			{saved ? (
 				<p className="text-[12px] font-semibold text-primary">
 					{t("submit.savedKeepGoing")}
