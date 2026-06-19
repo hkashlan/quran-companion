@@ -1,3 +1,4 @@
+import { getSurahNameForPage } from "@quran/db/domain/surahs";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Clock } from "lucide-react";
 import { useState } from "react";
@@ -16,11 +17,16 @@ function PlanEditor() {
 	const router = useRouter();
 	const { plan, pendingChange } = Route.useLoaderData();
 
-	const isPages = plan?.rangeMode === "pages";
 	const [startPage, setStartPage] = useState(String(plan?.startPage ?? 1));
 	const [daily, setDaily] = useState(String(plan?.dailyAmount ?? 1));
 	const [saving, setSaving] = useState(false);
 	const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+	const pageNum = Math.min(
+		604,
+		Math.max(1, Number.parseInt(startPage, 10) || 1),
+	);
+	const surahName = getSurahNameForPage(pageNum, "ar");
 
 	if (!plan) {
 		return (
@@ -73,13 +79,10 @@ function PlanEditor() {
 					{t("home.activeReview")}
 				</span>
 				<span className="text-[15px] font-bold text-primary">
-					{isPages
-						? reviewRange(plan)
-						: `${plan.startSurahNumber}:${plan.startVerse} – ${plan.endSurahNumber}:${plan.endVerse}`}
+					{reviewRange(plan)}
 				</span>
 				<span className="text-[12px] text-text-light">
-					{plan.dailyAmount}{" "}
-					{isPages ? t("assign.dailyPages") : t("assign.dailyVerses")}
+					{plan.dailyAmount} {t("assign.dailyPages")}
 				</span>
 			</Card>
 
@@ -97,9 +100,9 @@ function PlanEditor() {
 				</p>
 			) : null}
 
-			{isPages ? (
-				<Section title={t("plan.editStart")}>
-					<Card className="flex items-end gap-2">
+			<Section title={t("plan.editStart")}>
+				<Card className="flex flex-col gap-2">
+					<div className="flex items-end gap-2">
 						<div className="flex flex-1 flex-col gap-1">
 							<span className="text-[13px] font-semibold text-text">
 								{t("plan.startPage")}
@@ -115,28 +118,23 @@ function PlanEditor() {
 							/>
 						</div>
 						<Button
-							onClick={() =>
-								submit(
-									"start_page",
-									Math.min(
-										604,
-										Math.max(1, Number.parseInt(startPage, 10) || 1),
-									),
-								)
-							}
+							onClick={() => submit("start_page", pageNum)}
 							disabled={locked}
 						>
 							{t("plan.save")}
 						</Button>
-					</Card>
-				</Section>
-			) : null}
+					</div>
+					<span className="text-[13px] font-semibold text-primary">
+						{surahName}
+					</span>
+				</Card>
+			</Section>
 
 			<Section title={t("plan.editDaily")}>
 				<Card className="flex items-end gap-2">
 					<div className="flex flex-1 flex-col gap-1">
 						<span className="text-[13px] font-semibold text-text">
-							{isPages ? t("assign.dailyPages") : t("assign.dailyVerses")}
+							{t("assign.dailyPages")}
 						</span>
 						<input
 							type="number"

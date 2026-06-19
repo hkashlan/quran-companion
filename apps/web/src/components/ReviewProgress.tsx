@@ -21,6 +21,9 @@ type SessionRow = {
 	memorizedSurah: string;
 	memorizedVerseFrom: number;
 	memorizedVerseTo: number;
+	rangeMode: string;
+	startPage: number | null;
+	endPage: number | null;
 	sessionDate: string;
 	evaluation: string | null;
 };
@@ -177,8 +180,13 @@ export function ReviewProgress({
 							>
 								<span className="h-2 w-2 rounded-full bg-accent" />
 								<span className="flex-1 font-semibold text-text">
-									{s.memorizedSurah}: {s.memorizedVerseFrom}–
-									{s.memorizedVerseTo}
+									{s.startPage && s.endPage
+										? reviewRange({
+												rangeMode: "pages",
+												startPage: s.startPage,
+												endPage: s.endPage,
+											})
+										: `${s.memorizedSurah}: ${s.memorizedVerseFrom}–${s.memorizedVerseTo}`}
 								</span>
 								<span className="text-text-light">{s.sessionDate}</span>
 								{s.evaluation ? (

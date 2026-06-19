@@ -1,3 +1,5 @@
+import { getSurahNamesForPageRange } from "@quran/db/domain/surahs";
+
 /** A review/plan range as stored — verse columns are null for pages-mode rows. */
 export type ReviewRangeRow = {
 	rangeMode: string;
@@ -10,12 +12,17 @@ export type ReviewRangeRow = {
 };
 
 /**
- * Human label for a review's range: "ص N–M" for pages mode, "Surah – End: a–b"
- * for verses. Tolerates null verse fields (pages rows store only page numbers).
+ * Human label for a review's range. The app is page-based: "ص N–M · السورة",
+ * annotating the page range with the surah(s) it spans. Legacy verse-mode rows
+ * still render their "Surah – End: a–b" label for historical records.
  */
 export function reviewRange(r: ReviewRangeRow): string {
-	if (r.rangeMode === "pages" && r.startPage && r.endPage)
-		return `ص ${r.startPage}–${r.endPage}`;
+	if (r.startPage && r.endPage)
+		return `ص ${r.startPage}–${r.endPage} · ${getSurahNamesForPageRange(
+			r.startPage,
+			r.endPage,
+			"ar",
+		)}`;
 	const end =
 		r.endSurahName && r.endSurahName !== r.surahName
 			? ` – ${r.endSurahName}`

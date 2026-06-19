@@ -12,6 +12,7 @@
     "test": "turbo test",
     "db:generate": "pnpm --filter @quran/db db:generate",
     "db:migrate": "pnpm --filter @quran/db db:migrate",
+    "reset:today": "pnpm --filter @quran/web reset:today",
     "build:android": "pnpm --filter @quran/web build:android"
   },
   "devDependencies": {

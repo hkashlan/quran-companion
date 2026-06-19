@@ -1,13 +1,21 @@
-# Phase 5 — Capacitor native wrapper + Capgo OTA + native push
+# Phase 5 — Capacitor native wrapper + live-mode updates + native push
 
 The web app is the source of truth; Capacitor wraps the PWA into Android/iOS shells.
-OTA updates use **Capgo** (free tier); native push uses **FCM**, stored in the same
-`push_tokens` table (`kind = "fcm" | "apns"`).
+
+**Updates are free and need no OTA service.** The shells run in **live mode**: the
+native app loads the deployed PWA origin (`CAPACITOR_SERVER_URL`) on every launch,
+so each Vercel deploy is instantly live in the installed app — no store review, no
+Capgo, no bundle uploads. A new store binary is only needed when **native** code or
+plugins change. An offline fallback page (`server.errorPath` → `public/error.html`)
+is shown when the device can't reach the server.
+
+Native push uses **FCM**, stored in the same `push_tokens` table
+(`kind = "fcm" | "apns"`).
 
 ## Status (done in-repo)
 
 - ✅ Capacitor deps installed (`@capacitor/core`, cli, android, ios,
-  push-notifications, `@capgo/capacitor-updater`)
+  push-notifications)
 - ✅ **App id `com.qurancompanion`** — matches the existing Firebase project
   (`google-services.json` `package_name`), so FCM works without re-registering
 - ✅ `capacitor.config.ts` + static `capacitor-www/` shell (live-mode webDir)
@@ -39,17 +47,18 @@ cd android && ./gradlew assembleDebug                 # → app-debug.apk
 - A deployed PWA URL (set `CAPACITOR_SERVER_URL` for live mode)
 - **iOS** FCM: a `GoogleService-Info.plist` from Firebase (Android is done) + `FCM_*`
   service-account env on the server for sending
-- A Capgo account/token for OTA; Apple Developer + Google Play for store builds + signing
+- Apple Developer + Google Play accounts for store builds + signing (updates between
+  store releases ship for free via the live-mode deploy)
 
 ## 1. Install Capacitor (from `apps/web`)
 
 ```bash
 cd apps/web
-pnpm add @capacitor/core @capacitor/push-notifications @capgo/capacitor-updater
+pnpm add @capacitor/core @capacitor/push-notifications
 pnpm add -D @capacitor/cli @capacitor/android @capacitor/ios
 ```
 
-`capacitor.config.ts` is already committed (appId `com.hkashlan.qurancompanion`).
+`capacitor.config.ts` is already committed (appId `com.qurancompanion`).
 
 ## 2. Add native shells (folders are gitignored)
 
@@ -60,20 +69,24 @@ npx cap add ios            # macOS + Xcode only
 npx cap copy
 ```
 
-## 3. Live mode vs bundled
+## 3. Live mode (free updates, no OTA service)
 
-- **Live (recommended):** uncomment `server.url` in `capacitor.config.ts` and point it
-  at your Vercel URL. The shell always loads the latest deployed web build — you mostly
-  ship via Vercel, and only release a new store binary when native plugins change.
-- **Bundled:** ship the built assets inside the app and use **Capgo** for OTA:
+Set `CAPACITOR_SERVER_URL` to your Vercel URL before `cap sync`. `capacitor.config.ts`
+reads it into `server.url`, so the shell loads the latest deployed web build on every
+launch. Practically:
 
-```bash
-pnpm add @capgo/cli
-npx @capgo/cli login <CAPGO_TOKEN>
-npx @capgo/cli bundle upload --channel production
-```
+- **Web/UI changes** → just deploy to Vercel. The next time the app opens it shows the
+  new build. No rebuild, no store review, no upload — this replaces what Capgo did.
+- **Native changes** (new Capacitor plugin, native permission, app icon/splash) → cut a
+  new store binary (`cap sync` + Gradle/Xcode build → Play/App Store).
+- **Offline** → `server.errorPath` shows `public/error.html` (a retry screen) instead of
+  a blank webview when the device can't reach the server.
 
-`CapacitorUpdater.autoUpdate` is already on in the config.
+> If you ever need true offline-first (app fully usable with no network), that requires
+> shipping a static bundle inside the app and swapping it via the
+> `@capgo/capacitor-updater` plugin's `download`/`set` API against a self-hosted
+> `latest.json` manifest — a larger change since this app is SSR (TanStack Start). Not
+> needed for live mode.
 
 ## 4. Native push (FCM / APNs)
 

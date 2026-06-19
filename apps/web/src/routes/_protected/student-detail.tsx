@@ -8,6 +8,7 @@ import { ChevronRight, Flame, Star } from "lucide-react";
 import { ReviewProgress } from "@/components/ReviewProgress";
 import { Card } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { reviewRange } from "@/lib/review-range";
 import { getStudentDetail, removeReviewPlan } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student-detail")({
@@ -35,11 +36,7 @@ function StudentDetail() {
 		router.invalidate();
 	}
 
-	const planRange = plan
-		? plan.rangeMode === "pages"
-			? `ص ${plan.startPage ?? 1}–${plan.endPage ?? 604}`
-			: `${plan.startSurahNumber}:${plan.startVerse} – ${plan.endSurahNumber}:${plan.endVerse}`
-		: null;
+	const planRange = plan ? reviewRange(plan) : null;
 
 	return (
 		<div className="mx-auto flex min-h-screen max-w-md flex-col gap-4 bg-background p-4">

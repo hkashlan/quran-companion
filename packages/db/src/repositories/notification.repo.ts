@@ -57,3 +57,24 @@ export async function markAllRead(userId: string): Promise<number> {
 		.returning({ id: notificationDeliveries.id });
 	return rows.length;
 }
+
+export async function deleteOne(userId: string, id: string): Promise<boolean> {
+	const rows = await db
+		.delete(notificationDeliveries)
+		.where(
+			and(
+				eq(notificationDeliveries.id, id),
+				eq(notificationDeliveries.userId, userId),
+			),
+		)
+		.returning({ id: notificationDeliveries.id });
+	return rows.length > 0;
+}
+
+export async function deleteAll(userId: string): Promise<number> {
+	const rows = await db
+		.delete(notificationDeliveries)
+		.where(eq(notificationDeliveries.userId, userId))
+		.returning({ id: notificationDeliveries.id });
+	return rows.length;
+}

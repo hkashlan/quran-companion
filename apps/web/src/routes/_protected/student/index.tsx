@@ -1,21 +1,106 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import {
 	BookOpen,
+	ChevronLeft,
 	Clock,
 	MapPin,
 	Search,
 	SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { DailyProgress } from "@/components/DailyProgress";
 import { Button, Card, Section, StatCard, TextInput } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { reviewRange } from "@/lib/review-range";
-import { getStudentHome, joinCircleByCode } from "@/server/queries";
+import {
+	getStudentHome,
+	joinCircleByCode,
+	submitReview,
+} from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student/")({
 	loader: async () => getStudentHome(),
 	component: StudentHome,
 });
+
+type EditableReview = {
+	id: string;
+	startPage: number | null;
+	endPage: number | null;
+	progressPage: number | null;
+};
+
+/**
+ * Inline "what I did today" editor for a pages review on the home card. Lets the
+ * student report the page they've reached — including past the day's target — and
+ * change it any time; progress is monotonic so the ring only ever climbs.
+ */
+function PagesProgressEditor({ review }: { review: EditableReview }) {
+	const { t } = useI18n();
+	const router = useRouter();
+	const start = review.startPage ?? 1;
+	const end = review.endPage ?? start;
+	const [page, setPage] = useState(review.progressPage ?? end);
+	const [saving, setSaving] = useState(false);
+	const [saved, setSaved] = useState(false);
+
+	async function save() {
+		setSaving(true);
+		setSaved(false);
+		const res = await submitReview({
+			data: { reviewId: review.id, currentPage: page },
+		});
+		setSaving(false);
+		if (res.ok) {
+			setSaved(true);
+			router.invalidate();
+		}
+	}
+
+	return (
+		<div className="flex flex-col gap-2">
+			<span className="text-[13px] font-semibold text-text">
+				{t("submit.currentPage")}
+			</span>
+			<div className="flex items-center gap-2">
+				<input
+					type="number"
+					min={start}
+					max={604}
+					value={page}
+					onChange={(e) =>
+						setPage(
+							Math.max(
+								start,
+								Math.min(604, Number.parseInt(e.target.value, 10) || start),
+							),
+						)
+					}
+					className="w-24 rounded-md border border-border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none"
+				/>
+				<Button
+					onClick={save}
+					loading={saving}
+					disabled={page === review.progressPage}
+				>
+					{t("common.save")}
+				</Button>
+			</div>
+			<span className="text-[12px] text-text-secondary">
+				{t("submit.pagesHint", {
+					from: start,
+					to: end,
+					reached: review.progressPage ?? "—",
+				})}
+			</span>
+			{saved ? (
+				<p className="text-[12px] font-semibold text-primary">
+					{t("submit.savedKeepGoing")}
+				</p>
+			) : null}
+		</div>
+	);
+}
 
 function useCountdownToMidnight() {
 	const [text, setText] = useState("--:--");
@@ -198,24 +283,24 @@ function StudentHome() {
 						<span className="rounded-md bg-primary-light px-3 py-2 text-center text-[15px] font-bold text-primary">
 							{reviewRange(data.activeReview)}
 						</span>
-						{data.activeReview.rangeMode === "pages" &&
-						data.activeReview.progressPage != null ? (
-							<span className="text-center text-[13px] text-text-secondary">
-								{t("home.reachedPage", {
-									page: data.activeReview.progressPage,
-								})}
-							</span>
-						) : null}
-						<Button
-							onClick={() =>
-								router.navigate({
-									to: "/submit-review",
-									search: { reviewId: data.activeReview?.id },
-								})
-							}
-						>
-							{t("home.submit")}
-						</Button>
+						<DailyProgress
+							review={data.activeReview}
+							streak={data.user.streak}
+						/>
+						{data.activeReview.startPage != null ? (
+							<PagesProgressEditor review={data.activeReview} />
+						) : (
+							<Button
+								onClick={() =>
+									router.navigate({
+										to: "/submit-review",
+										search: { reviewId: data.activeReview?.id },
+									})
+								}
+							>
+								{t("home.submit")}
+							</Button>
+						)}
 					</Card>
 				) : (
 					<Card className="text-center text-[13px] text-text-secondary">
@@ -242,9 +327,16 @@ function StudentHome() {
 				<Section title={t("home.pendingReviews")}>
 					<Card className="flex flex-col gap-2 p-3">
 						{data.undoneReviews.map((r) => (
-							<div
+							<button
+								type="button"
 								key={r.id}
-								className="flex items-center justify-between gap-2 text-[12px]"
+								onClick={() =>
+									router.navigate({
+										to: "/submit-review",
+										search: { reviewId: r.id },
+									})
+								}
+								className="flex items-center justify-between gap-2 rounded-md px-1 py-1 text-[12px] active:bg-primary-light"
 							>
 								<span className="flex items-center gap-2">
 									<span
@@ -252,8 +344,11 @@ function StudentHome() {
 									/>
 									<span className="text-text">{reviewRange(r)}</span>
 								</span>
-								<span className="text-text-light">{r.assignedDate}</span>
-							</div>
+								<span className="flex items-center gap-1 text-text-light">
+									{r.assignedDate}
+									<ChevronLeft size={13} />
+								</span>
+							</button>
 						))}
 					</Card>
 				</Section>

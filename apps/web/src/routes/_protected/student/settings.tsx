@@ -1,9 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { signOut } from "@/lib/auth-client";
 import { LOCALE_LABEL, LOCALES, type Locale, useI18n } from "@/lib/i18n";
-import { enablePush } from "@/lib/push-client";
+import {
+	enablePush,
+	isIosNeedingInstall,
+	type PushResult,
+} from "@/lib/push-client";
 import { getStudentHome } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student/settings")({
@@ -18,7 +22,10 @@ function SettingsScreen() {
 	const { t, locale, setLocale } = useI18n();
 	const navigate = useNavigate();
 	const { user } = Route.useLoaderData();
-	const [pushMsg, setPushMsg] = useState<string | null>(null);
+	const [pushMsg, setPushMsg] = useState<PushResult | null>(null);
+	// Computed after mount to stay SSR-safe (avoids a hydration mismatch).
+	const [iosHint, setIosHint] = useState(false);
+	useEffect(() => setIosHint(isIosNeedingInstall()), []);
 
 	async function logout() {
 		await signOut();
@@ -26,8 +33,7 @@ function SettingsScreen() {
 	}
 
 	async function notifications() {
-		const res = await enablePush();
-		setPushMsg(res === "subscribed" ? "✓" : res);
+		setPushMsg(await enablePush());
 	}
 
 	return (
@@ -63,10 +69,22 @@ function SettingsScreen() {
 				</div>
 			</div>
 
-			<Button variant="outline" onClick={notifications}>
-				{t("settings.enableNotifications")}
-				{pushMsg ? ` — ${pushMsg}` : ""}
-			</Button>
+			<div className="flex flex-col gap-2">
+				<Button variant="outline" onClick={notifications}>
+					{t("settings.enableNotifications")}
+				</Button>
+				{(pushMsg || iosHint) && (
+					<p
+						className={`text-[12px] leading-relaxed ${
+							pushMsg === "subscribed"
+								? "text-primary"
+								: "text-text-secondary"
+						}`}
+					>
+						{pushMsg ? t(`push.${pushMsg}`) : t("push.ios-install")}
+					</p>
+				)}
+			</div>
 			<Button
 				variant="outline"
 				onClick={() => navigate({ to: "/change-password" })}

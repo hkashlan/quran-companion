@@ -35,6 +35,7 @@
     "db:migrate:prod": "tsx scripts/migrate-prod.ts",
     "db:push": "drizzle-kit push",
     "db:barrels": "tsx scripts/generate-barrels.ts",
+    "db:migrate:pages": "tsx --env-file=../../.env scripts/migrate-verses-to-pages.ts",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "test": "vitest run"
   },
