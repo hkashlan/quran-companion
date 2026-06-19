@@ -2,12 +2,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { signOut } from "@/lib/auth-client";
+import { enableFirebasePush } from "@/lib/firebase-push";
 import { LOCALE_LABEL, LOCALES, type Locale, useI18n } from "@/lib/i18n";
-import {
-	enablePush,
-	isIosNeedingInstall,
-	type PushResult,
-} from "@/lib/push-client";
+import { isIosNeedingInstall, type PushResult } from "@/lib/push-client";
 import { getStudentHome } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student/settings")({
@@ -33,7 +30,7 @@ function SettingsScreen() {
 	}
 
 	async function notifications() {
-		setPushMsg(await enablePush());
+		setPushMsg(await enableFirebasePush());
 	}
 
 	return (

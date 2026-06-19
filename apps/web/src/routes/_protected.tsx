@@ -1,5 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { InstallPrompt } from "@/components/InstallPrompt";
+import { autoEnablePush } from "@/lib/firebase-push";
 import { registerNativePush } from "@/lib/native-push";
 import { getSession } from "@/server/session";
 
@@ -14,9 +16,15 @@ export const Route = createFileRoute("/_protected")({
 });
 
 function ProtectedLayout() {
-	// On the Capacitor native shell this registers FCM push; on web it no-ops.
+	// Native shell → FCM via Capacitor; web → FCM via Firebase (on by default).
 	useEffect(() => {
 		void registerNativePush();
+		void autoEnablePush();
 	}, []);
-	return <Outlet />;
+	return (
+		<>
+			<Outlet />
+			<InstallPrompt />
+		</>
+	);
 }

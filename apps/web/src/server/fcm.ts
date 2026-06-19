@@ -28,10 +28,18 @@ export type FcmMessage = {
 	data?: Record<string, unknown>;
 };
 
-/** Send one FCM message to a device token. Returns "ok" | "gone" | "skip" | "error". */
+/**
+ * Send one FCM message to a device token. Returns "ok" | "gone" | "skip" | "error".
+ *
+ * `dataOnly` omits the `notification` block and folds title/body into `data`.
+ * Used for web (FCM-for-browser) tokens so the firebase-messaging-sw renders
+ * the notification itself (RTL/icon) instead of the SDK auto-showing a default
+ * one — which would otherwise produce a duplicate.
+ */
 export async function sendFcm(
 	token: string,
 	msg: FcmMessage,
+	opts?: { dataOnly?: boolean },
 ): Promise<"ok" | "gone" | "skip" | "error"> {
 	const cfg = getAuth();
 	if (!cfg) return "skip";
@@ -42,6 +50,14 @@ export async function sendFcm(
 		const data: Record<string, string> = {};
 		for (const [k, v] of Object.entries(msg.data ?? {})) data[k] = String(v);
 
+		const message: Record<string, unknown> = { token, data };
+		if (opts?.dataOnly) {
+			data.title = msg.title;
+			data.body = msg.body;
+		} else {
+			message.notification = { title: msg.title, body: msg.body };
+		}
+
 		const res = await fetch(
 			`https://fcm.googleapis.com/v1/projects/${cfg.projectId}/messages:send`,
 			{
@@ -50,13 +66,7 @@ export async function sendFcm(
 					Authorization: `Bearer ${accessToken}`,
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({
-					message: {
-						token,
-						notification: { title: msg.title, body: msg.body },
-						data,
-					},
-				}),
+				body: JSON.stringify({ message }),
 			},
 		);
 		if (res.ok) return "ok";

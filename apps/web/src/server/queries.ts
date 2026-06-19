@@ -49,6 +49,28 @@ export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(
 	},
 );
 
+/**
+ * Public Firebase web config + Web Push VAPID key for the FCM browser flow.
+ * The config object is non-secret (shipped to every browser), so it lives in
+ * env as one-line JSON. Returns `{ config: null }` when Firebase web push isn't
+ * configured, letting the client fall back to the native VAPID web-push path.
+ */
+export const getFirebaseConfig = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const raw = process.env.FIREBASE_WEB_CONFIG;
+		const vapidKey = process.env.FIREBASE_VAPID_KEY ?? "";
+		if (!raw || !vapidKey) return { config: null, vapidKey: "" };
+		try {
+			return {
+				config: JSON.parse(raw) as Record<string, string>,
+				vapidKey,
+			};
+		} catch {
+			return { config: null, vapidKey: "" };
+		}
+	},
+);
+
 /** Minimal current-user info for headers/settings. */
 export const getMe = createServerFn({ method: "GET" }).handler(async () => {
 	const u = await requireUser();

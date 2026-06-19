@@ -43,9 +43,12 @@ export async function sendPush(userId: string, message: PushMessage) {
 		db.update(pushTokens).set({ isActive: false }).where(eq(pushTokens.id, id));
 
 	for (const sub of subs) {
-		// ── Native (FCM) ──
+		// ── FCM (native + web-via-Firebase) ──
 		if (sub.kind === "fcm" && sub.token) {
-			const result = await sendFcm(sub.token, message);
+			// Web tokens get data-only so the firebase SW renders the notification.
+			const result = await sendFcm(sub.token, message, {
+				dataOnly: sub.platform === "web",
+			});
 			if (result === "ok") sent++;
 			else if (result === "skip") continue;
 			else {

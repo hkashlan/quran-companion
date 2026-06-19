@@ -27,16 +27,15 @@ async function deliverOtp(email: string, otp: string, type: string) {
  * Phase 1 TODO: add email-verification + reset-password (transactional email via
  * Resend) and wire `sendVerificationEmail` / `sendResetPassword`.
  */
-// Keep users signed in effectively forever: only an explicit signOut() ends a
-// session. The cookie + session row are renewed (`updateAge`) on activity, and
-// the absolute expiry is set 100 years out so inactive users are never forced
-// to re-login.
-const HUNDRED_YEARS_IN_SECONDS = 60 * 60 * 24 * 365 * 100;
+// Keep active users signed in: the cookie + session row are renewed
+// (`updateAge`) on activity, so the rolling 1-year expiry keeps moving forward.
+// (Stays well under the 400-day cookie Max-Age ceiling browsers enforce.)
+const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365;
 
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg" }),
 	session: {
-		expiresIn: HUNDRED_YEARS_IN_SECONDS,
+		expiresIn: ONE_YEAR_IN_SECONDS,
 		updateAge: 60 * 60 * 24, // refresh the expiry at most once a day on activity
 	},
 	emailAndPassword: {

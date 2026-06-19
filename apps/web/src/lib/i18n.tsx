@@ -82,6 +82,11 @@ const messages: Record<Locale, Dict> = {
 		"push.no-vapid": "الإشعارات غير مهيأة على الخادم.",
 		"push.ios-install":
 			"لتلقّي التنبيهات على الآيفون: اضغط زر المشاركة ثم «أضف إلى الشاشة الرئيسية»، وافتح التطبيق من هناك.",
+		"install.title": "ثبّت رفيق القرآن",
+		"install.body": "أضِفه إلى شاشتك الرئيسية للوصول السريع والتذكيرات.",
+		"install.cta": "تثبيت",
+		"install.dismiss": "ليس الآن",
+		"install.iosHint": "اضغط زر المشاركة ثم «أضف إلى الشاشة الرئيسية».",
 		"settings.logout": "تسجيل الخروج",
 		"settings.version": "إصدار التطبيق",
 		"notifications.title": "الإشعارات",
@@ -280,6 +285,11 @@ const messages: Record<Locale, Dict> = {
 		"push.no-vapid": "Notifications aren't configured on the server.",
 		"push.ios-install":
 			"To get reminders on iPhone: tap the Share button, then “Add to Home Screen”, and open the app from there.",
+		"install.title": "Install Quran Companion",
+		"install.body": "Add it to your home screen for quick access and reminders.",
+		"install.cta": "Install",
+		"install.dismiss": "Not now",
+		"install.iosHint": "Tap the Share button, then “Add to Home Screen”.",
 		"settings.logout": "Log out",
 		"settings.version": "App Version",
 		"notifications.title": "Notifications",
@@ -478,6 +488,12 @@ const messages: Record<Locale, Dict> = {
 		"push.no-vapid": "Mitteilungen sind auf dem Server nicht konfiguriert.",
 		"push.ios-install":
 			"Für Mitteilungen auf dem iPhone: Teilen-Symbol antippen, dann „Zum Home-Bildschirm“, und die App von dort öffnen.",
+		"install.title": "Quran-Begleiter installieren",
+		"install.body":
+			"Füge ihn zum Startbildschirm hinzu – für schnellen Zugriff und Erinnerungen.",
+		"install.cta": "Installieren",
+		"install.dismiss": "Später",
+		"install.iosHint": "Tippe auf „Teilen“ und dann „Zum Home-Bildschirm“.",
 		"settings.logout": "Abmelden",
 		"settings.version": "App-Version",
 		"notifications.title": "Mitteilungen",
@@ -628,8 +644,23 @@ function isLocale(value: string | null): value is Locale {
 
 function readStoredLocale(): Locale | null {
 	if (typeof window === "undefined") return null;
-	const stored = window.localStorage.getItem(STORAGE_KEY);
-	return isLocale(stored) ? stored : null;
+	try {
+		const stored = window.localStorage.getItem(STORAGE_KEY);
+		return isLocale(stored) ? stored : null;
+	} catch {
+		// localStorage can throw in sandboxed/partitioned contexts (e.g. the
+		// VSCode integrated browser) or when storage is disabled.
+		return null;
+	}
+}
+
+function storeLocale(locale: Locale) {
+	if (typeof window === "undefined") return;
+	try {
+		window.localStorage.setItem(STORAGE_KEY, locale);
+	} catch {
+		// Ignore — see readStoredLocale.
+	}
 }
 
 function applyDocumentLocale(locale: Locale) {
@@ -669,8 +700,7 @@ export function I18nProvider({
 
 	const setLocale = (l: Locale) => {
 		setLocaleState(l);
-		if (typeof window !== "undefined")
-			window.localStorage.setItem(STORAGE_KEY, l);
+		storeLocale(l);
 		applyDocumentLocale(l);
 	};
 

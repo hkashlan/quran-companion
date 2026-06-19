@@ -67,5 +67,7 @@ minimumReleaseAgeExclude:
   - nitro-nightly@3.0.1-20260604-184855-0a07991c
 
 allowBuilds:
+  '@firebase/util': set this to true or false
   esbuild: true
   lightningcss: true
+  protobufjs: set this to true or false
