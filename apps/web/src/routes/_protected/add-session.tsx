@@ -1,11 +1,7 @@
+import { getSurahNameForPage } from "@quran/db/domain/surahs";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
-import {
-	NumberPicker,
-	SurahPicker,
-	surahVerseCount,
-} from "@/components/pickers";
 import { Button } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { createSession, getStudentModalData } from "@/server/queries";
@@ -28,29 +24,30 @@ function AddSession() {
 	const { studentId } = Route.useSearch();
 	const { student } = Route.useLoaderData();
 
-	const [startSurah, setStartSurah] = useState(1);
-	const [startVerse, setStartVerse] = useState(1);
-	const [diffEnd, setDiffEnd] = useState(false);
-	const [endSurah, setEndSurah] = useState(1);
-	const [endVerse, setEndVerse] = useState(7);
+	const [startPage, setStartPage] = useState("1");
+	const [endPage, setEndPage] = useState("1");
 	const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
 	const [time, setTime] = useState("");
 	const [notes, setNotes] = useState("");
 	const [evaluation, setEvaluation] = useState("");
 	const [saving, setSaving] = useState(false);
 
-	const effectiveEnd = diffEnd ? endSurah : startSurah;
+	const start = Math.min(604, Math.max(1, Number.parseInt(startPage, 10) || 1));
+	const end = Math.min(604, Math.max(1, Number.parseInt(endPage, 10) || 1));
+	const surahLabel = `${getSurahNameForPage(Math.min(start, end), "ar")}${
+		getSurahNameForPage(Math.min(start, end), "ar") !==
+		getSurahNameForPage(Math.max(start, end), "ar")
+			? ` – ${getSurahNameForPage(Math.max(start, end), "ar")}`
+			: ""
+	}`;
 
 	async function save() {
 		setSaving(true);
 		await createSession({
 			data: {
 				studentId,
-				rangeMode: "verses",
-				startSurahNumber: startSurah,
-				startVerse,
-				endSurahNumber: effectiveEnd,
-				endVerse,
+				startPage: start,
+				endPage: end,
 				sessionDate: date,
 				sessionTime: time || undefined,
 				notes: notes || undefined,
@@ -79,46 +76,37 @@ function AddSession() {
 				</h1>
 			</header>
 
-			<SurahPicker
-				label={t("assign.startSurah")}
-				value={startSurah}
-				onChange={(s) => {
-					setStartSurah(s);
-					setStartVerse((v) => Math.min(v, surahVerseCount(s)));
-				}}
-			/>
-			<NumberPicker
-				label={t("assign.fromVerse")}
-				value={startVerse}
-				min={1}
-				max={surahVerseCount(startSurah)}
-				onChange={setStartVerse}
-			/>
-			<label className="flex items-center gap-2 px-1 text-[14px] text-text">
-				<input
-					type="checkbox"
-					checked={diffEnd}
-					onChange={(e) => setDiffEnd(e.target.checked)}
-				/>
-				{t("assign.differentEndSurah")}
-			</label>
-			{diffEnd ? (
-				<SurahPicker
-					label={t("assign.endSurah")}
-					value={endSurah}
-					onChange={(s) => {
-						setEndSurah(s);
-						setEndVerse((v) => Math.min(v, surahVerseCount(s)));
-					}}
-				/>
-			) : null}
-			<NumberPicker
-				label={t("assign.toVerse")}
-				value={endVerse}
-				min={1}
-				max={surahVerseCount(effectiveEnd)}
-				onChange={setEndVerse}
-			/>
+			<div className="flex gap-2">
+				<div className="flex flex-1 flex-col gap-1">
+					<span className="text-[13px] font-semibold text-text">
+						{t("assign.startPage")}
+					</span>
+					<input
+						type="number"
+						min={1}
+						max={604}
+						value={startPage}
+						onChange={(e) => setStartPage(e.target.value)}
+						className={inputClass}
+					/>
+				</div>
+				<div className="flex flex-1 flex-col gap-1">
+					<span className="text-[13px] font-semibold text-text">
+						{t("session.endPage")}
+					</span>
+					<input
+						type="number"
+						min={1}
+						max={604}
+						value={endPage}
+						onChange={(e) => setEndPage(e.target.value)}
+						className={inputClass}
+					/>
+				</div>
+			</div>
+			<span className="px-1 text-[13px] font-semibold text-primary">
+				{surahLabel}
+			</span>
 
 			<div className="flex gap-2">
 				<div className="flex flex-1 flex-col gap-1">

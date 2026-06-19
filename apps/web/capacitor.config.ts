@@ -4,9 +4,17 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * Capacitor wrapper config. The native shells are added with
  * `npx cap add android` / `npx cap add ios` (those folders are gitignored).
  *
- * Recommended: LIVE mode — set CAPACITOR_SERVER_URL to the deployed PWA origin
- * before `npx cap sync`, so the shell loads the latest web build (and Capgo
- * pushes OTA bundles). Without it, the bundled `capacitor-www` shell is shown.
+ * LIVE mode — set CAPACITOR_SERVER_URL to the deployed PWA origin before
+ * `npx cap sync`, so the shell loads the latest web build straight from the
+ * server. Because the app loads the remote origin on every launch, each Vercel
+ * deploy is effectively an instant, free over-the-air update — no separate OTA
+ * service is needed. A new store binary is only required when native code or
+ * plugins change. Without CAPACITOR_SERVER_URL the bundled `capacitor-www`
+ * shell (a loading screen) is shown.
+ *
+ * `server.errorPath` points at a local page bundled in capacitor-www, shown
+ * when the remote origin can't be reached (e.g. offline) instead of a blank
+ * white webview.
  *
  * See docs/CAPACITOR.md for the full runbook.
  */
@@ -21,9 +29,10 @@ const config: CapacitorConfig = {
 	server: {
 		...(serverUrl ? { url: serverUrl } : {}),
 		androidScheme: "https",
+		// Local offline fallback (lives in public/, copied into capacitor-www).
+		errorPath: "error.html",
 	},
 	plugins: {
-		CapacitorUpdater: { autoUpdate: true },
 		PushNotifications: { presentationOptions: ["badge", "sound", "alert"] },
 	},
 };

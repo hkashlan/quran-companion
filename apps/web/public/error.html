@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#0a7b4f" />
+		<title>رفيق القرآن — لا يوجد اتصال</title>
+		<style>
+			html, body { margin: 0; height: 100%; background: #fafbf9; font-family: system-ui, sans-serif; }
+			.wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #1a2e1a; padding: 24px; box-sizing: border-box; }
+			.logo { width: 88px; height: 88px; border-radius: 22px; background: #0a7b4f; display: flex; align-items: center; justify-content: center; }
+			h1 { color: #0a7b4f; font-size: 22px; margin: 0; text-align: center; }
+			p { color: #5a6e5a; font-size: 14px; max-width: 300px; text-align: center; line-height: 1.6; margin: 0; }
+			button { margin-top: 8px; background: #0a7b4f; color: #fff; border: 0; border-radius: 12px; padding: 12px 28px; font-size: 16px; font-family: inherit; cursor: pointer; }
+			button:active { opacity: 0.85; }
+		</style>
+	</head>
+	<body>
+		<!--
+			Shown by Capacitor (server.errorPath in capacitor.config.ts) when the
+			remote origin can't be loaded — e.g. the device is offline. "Retry"
+			navigates back to the live server URL so the app loads once the network
+			returns. SERVER_URL must match the CAPACITOR_SERVER_URL used at build.
+		-->
+		<div class="wrap">
+			<div class="logo">
+				<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+					<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+					<path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+				</svg>
+			</div>
+			<h1>تعذّر الاتصال</h1>
+			<p>تعذّر الوصول إلى الخادم. تأكّد من اتصالك بالإنترنت ثم أعد المحاولة.</p>
+			<button id="retry" type="button">إعادة المحاولة</button>
+		</div>
+		<script>
+			// Keep in sync with CAPACITOR_SERVER_URL (capacitor.config.ts / build-android.ts).
+			var SERVER_URL = "https://quran-companion-web.vercel.app";
+			document.getElementById("retry").addEventListener("click", function () {
+				window.location.href = SERVER_URL;
+			});
+		</script>
+	</body>
+</html>

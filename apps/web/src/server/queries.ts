@@ -1,5 +1,5 @@
 import { db } from "@quran/db/db";
-import { isStartAdvance, MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
+import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
 import {
 	createCircle,
 	findCircleByCode,
@@ -10,8 +10,11 @@ import {
 	type LeaderboardPeriod,
 } from "@quran/db/repositories/leaderboard";
 import {
+	deleteAll,
+	deleteOne,
 	listNotifications,
 	markAllRead,
+	markRead,
 	unreadCount,
 } from "@quran/db/repositories/notification";
 import { joinRequests } from "@quran/db/tables/join-request.drizzle";
@@ -124,16 +127,56 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 			)
 			.limit(1);
 
+		// The home "active review" is today's review — surfaced even after it is
+		// completed/target-met, so the student can keep adjusting what they did
+		// today. If the daily cron hasn't created it yet (and there's an active
+		// plan), create it now so the card is never empty for an enrolled student.
+		const todayStr = today();
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
+		const [activePlan] = await db
+			.select()
+			.from(reviewPlans)
+			.where(
+				and(eq(reviewPlans.studentId, u.id), eq(reviewPlans.isActive, true)),
+			)
+			.limit(1);
+		const loadTodayReview = async () =>
+			(
+				await db
+					.select()
+					.from(reviews)
+					.where(
+						and(
+							eq(reviews.studentId, u.id),
+							eq(reviews.assignedDate, todayStr),
+						),
+					)
+					.orderBy(desc(reviews.createdAt))
+					.limit(1)
+			)[0] ?? null;
+		let activeReview = await loadTodayReview();
+		if (!activeReview && activePlan) {
+			const { ensureTodayReview } = await import("./scheduler.ts");
+			await ensureTodayReview(activePlan, todayStr);
+			activeReview = await loadTodayReview();
+		}
+		if (!activeReview) activeReview = pending[0] ?? null;
+
 		return {
 			user: { id: u.id, name: u.name, points: u.points, streak: u.streak },
 			circles,
 			pendingRequests,
 			hasPendingPlanChange: pendingPlanChange.length > 0,
-			activeReview: pending[0] ?? null,
-			// A pages review that met its target is still `pending` (so it stays
-			// submittable today) — don't list it as outstanding work.
-			undoneReviews: [...pending.slice(1), ...missed].filter(
-				(r) => !(r.rangeMode === "pages" && r.completedAt != null),
+			activeReview,
+			// Outstanding work: older pending + missed reviews, minus today's active
+			// review and any pages review that already met its target (still editable
+			// on the active-review card above).
+			undoneReviews: [...pending, ...missed].filter(
+				(r) =>
+					r.id !== activeReview?.id &&
+					!(r.rangeMode === "pages" && r.completedAt != null),
 			),
 			stats: {
 				points: u.points,
@@ -170,6 +213,33 @@ export const markAllNotificationsRead = createServerFn({
 	const u = await requireUser();
 	const marked = await markAllRead(u.id);
 	return { marked };
+});
+
+/** Mark a single notification (owned by the current user) as read. */
+export const markNotificationRead = createServerFn({ method: "POST" })
+	.validator(z.object({ id: z.string() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		await markRead(u.id, data.id);
+		return { ok: true };
+	});
+
+/** Delete a single notification owned by the current user. */
+export const deleteNotification = createServerFn({ method: "POST" })
+	.validator(z.object({ id: z.string() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		await deleteOne(u.id, data.id);
+		return { ok: true };
+	});
+
+/** Delete all of the current user's notifications. */
+export const deleteAllNotifications = createServerFn({
+	method: "POST",
+}).handler(async () => {
+	const u = await requireUser();
+	const deleted = await deleteAll(u.id);
+	return { deleted };
 });
 
 /** Teacher: circles I own/teach, each with its student members. */
@@ -313,6 +383,9 @@ export const getStudentDetail = createServerFn({ method: "GET" })
 				memorizedSurah: sessionRecords.memorizedSurah,
 				memorizedVerseFrom: sessionRecords.memorizedVerseFrom,
 				memorizedVerseTo: sessionRecords.memorizedVerseTo,
+				rangeMode: sessionRecords.rangeMode,
+				startPage: sessionRecords.startPage,
+				endPage: sessionRecords.endPage,
 				sessionDate: sessionRecords.sessionDate,
 				evaluation: sessionRecords.evaluation,
 			})
@@ -376,6 +449,9 @@ export const getStudentProgress = createServerFn({ method: "GET" }).handler(
 				memorizedSurah: sessionRecords.memorizedSurah,
 				memorizedVerseFrom: sessionRecords.memorizedVerseFrom,
 				memorizedVerseTo: sessionRecords.memorizedVerseTo,
+				rangeMode: sessionRecords.rangeMode,
+				startPage: sessionRecords.startPage,
+				endPage: sessionRecords.endPage,
 				sessionDate: sessionRecords.sessionDate,
 				evaluation: sessionRecords.evaluation,
 			})
@@ -393,12 +469,9 @@ export const getStudentProgress = createServerFn({ method: "GET" }).handler(
 
 // ── Review modals (assign-review, add-session, submit-review) ──
 
-const rangeFields = {
-	rangeMode: z.enum(["verses", "pages"]).default("verses"),
-	startSurahNumber: z.number().int(),
-	startVerse: z.number().int(),
-	endSurahNumber: z.number().int(),
-	endVerse: z.number().int(),
+const pageRangeFields = {
+	startPage: z.number().int().min(1).max(MUSHAF_PAGES),
+	endPage: z.number().int().min(1).max(MUSHAF_PAGES),
 };
 
 /** Teacher: a student's name + current active review plan (for edit prefill). */
@@ -428,19 +501,13 @@ export const getStudentModalData = createServerFn({ method: "GET" })
 		return { student: student ?? null, plan: plan ?? null };
 	});
 
-/** Teacher: create or update the student's active review plan. */
+/** Teacher: create or update the student's active page-based review plan. */
 export const assignReviewPlan = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			studentId: z.string(),
 			dailyAmount: z.number().int().min(1),
-			rangeMode: z.enum(["verses", "pages"]).default("verses"),
-			// Verse fields required for verses mode; page fields for pages mode.
-			startSurahNumber: z.number().int().optional(),
-			startVerse: z.number().int().optional(),
-			endSurahNumber: z.number().int().optional(),
-			endVerse: z.number().int().optional(),
-			startPage: z.number().int().min(1).max(MUSHAF_PAGES).optional(),
+			startPage: z.number().int().min(1).max(MUSHAF_PAGES),
 		}),
 	)
 	.handler(async ({ data }) => {
@@ -458,26 +525,23 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				),
 			)
 			.limit(1);
-		const isPages = data.rangeMode === "pages";
 		// Re-anchor the next review when a teacher edit changes the start page.
 		const startPageChanged =
-			isPages &&
-			!!existing[0] &&
-			(existing[0].startPage ?? null) !== (data.startPage ?? 1);
+			!!existing[0] && (existing[0].startPage ?? null) !== data.startPage;
 		const values = {
 			studentId: data.studentId,
 			teacherId: teacher.id,
-			// reviewPlans keeps verse columns NOT NULL; pages plans store placeholders
-			// (the scheduler ignores them and uses startPage/endPage instead).
-			startSurahNumber: data.startSurahNumber ?? 1,
-			startVerse: data.startVerse ?? 1,
-			endSurahNumber: data.endSurahNumber ?? 1,
-			endVerse: data.endVerse ?? 1,
-			rangeMode: data.rangeMode,
-			startPage: isPages ? (data.startPage ?? 1) : null,
-			endPage: isPages ? MUSHAF_PAGES : null,
+			// Verse columns are NOT NULL legacy fields; store placeholders. Plans are
+			// entirely page-based — the scheduler uses startPage/endPage.
+			startSurahNumber: 1,
+			startVerse: 1,
+			endSurahNumber: 1,
+			endVerse: 1,
+			rangeMode: "pages",
+			startPage: data.startPage,
+			endPage: MUSHAF_PAGES,
 			dailyAmount: data.dailyAmount,
-			dailyUnit: data.rangeMode,
+			dailyUnit: "pages",
 			isActive: true,
 			cursorReset: startPageChanged,
 		};
@@ -507,13 +571,8 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				id: planId,
 				studentId: values.studentId,
 				teacherId: values.teacherId,
-				startSurahNumber: values.startSurahNumber,
-				startVerse: values.startVerse,
-				endSurahNumber: values.endSurahNumber,
-				endVerse: values.endVerse,
 				startPage: values.startPage,
 				dailyAmount: values.dailyAmount,
-				rangeMode: values.rangeMode,
 				cursorReset: values.cursorReset,
 			},
 			today(),
@@ -582,9 +641,11 @@ export const getStudentPlan = createServerFn({ method: "GET" }).handler(
 );
 
 /**
- * Student: request a change to their active plan. Changes that ease the workload
- * (fewer pages/day, or a later start page) are queued for teacher approval; the
- * rest apply immediately. Returns `applied` to tell the UI which path happened.
+ * Student: request a change to their active plan. A change that *increases* the
+ * workload applies immediately (the teacher is just notified): a lower start page
+ * (revisiting earlier pages) or more pages/day. A change that *eases* the workload
+ * — a later start page (skipping ahead) or fewer pages/day — is queued for teacher
+ * approval. Returns `applied` to tell the UI which path happened.
  */
 export const requestPlanChange = createServerFn({ method: "POST" })
 	.validator(
@@ -611,6 +672,52 @@ export const requestPlanChange = createServerFn({ method: "POST" })
 			.limit(1);
 		if (!plan) return { ok: false as const, error: "no_plan" as const };
 
+		// Proposed value, the current value, and whether the change increases the
+		// workload (→ apply immediately) or eases it (→ needs teacher approval).
+		let proposed: number;
+		let current: number;
+		let increasesWorkload: boolean;
+		if (data.field === "daily_amount") {
+			if (data.dailyAmount == null)
+				return { ok: false as const, error: "invalid" as const };
+			proposed = data.dailyAmount;
+			current = plan.dailyAmount;
+			increasesWorkload = proposed > current; // more pages/day
+		} else {
+			if (data.startPage == null)
+				return { ok: false as const, error: "invalid" as const };
+			proposed = data.startPage;
+			current = plan.startPage ?? 1;
+			increasesWorkload = proposed < current; // earlier start page
+		}
+
+		// Unchanged → nothing to do.
+		if (proposed === current)
+			return { ok: true as const, applied: true as const };
+
+		if (increasesWorkload) {
+			if (data.field === "daily_amount")
+				await db
+					.update(reviewPlans)
+					.set({ dailyAmount: proposed })
+					.where(eq(reviewPlans.id, plan.id));
+			// cursorReset: the next review re-anchors to the new start page.
+			else
+				await db
+					.update(reviewPlans)
+					.set({ startPage: proposed, cursorReset: true })
+					.where(eq(reviewPlans.id, plan.id));
+			await notifyPlanChange(
+				plan.teacherId,
+				"plan_changed",
+				"تعديل الخطة",
+				`${u.name} عدّل خطته`,
+				`plan_changed:${plan.id}:${data.field}:${proposed}`,
+			);
+			return { ok: true as const, applied: true as const };
+		}
+
+		// Eases the workload → queue for approval (one pending request at a time).
 		const pending = await db
 			.select({ id: planChangeRequests.id })
 			.from(planChangeRequests)
@@ -624,45 +731,13 @@ export const requestPlanChange = createServerFn({ method: "POST" })
 		if (pending[0])
 			return { ok: false as const, error: "already_requested" as const };
 
-		// Decide: apply immediately, or queue for teacher approval.
-		let needsApproval: boolean;
-		if (data.field === "daily_amount") {
-			const proposed = data.dailyAmount;
-			if (proposed == null)
-				return { ok: false as const, error: "invalid" as const };
-			needsApproval = proposed < plan.dailyAmount; // decreasing → approval
-			if (!needsApproval) {
-				await db
-					.update(reviewPlans)
-					.set({ dailyAmount: proposed })
-					.where(eq(reviewPlans.id, plan.id));
-				return { ok: true as const, applied: true as const };
-			}
-		} else {
-			const proposed = data.startPage;
-			if (proposed == null)
-				return { ok: false as const, error: "invalid" as const };
-			needsApproval = isStartAdvance(plan.startPage ?? 1, proposed); // later → approval
-			if (!needsApproval) {
-				// cursorReset: the next review re-anchors to the new start page.
-				await db
-					.update(reviewPlans)
-					.set({ startPage: proposed, cursorReset: true })
-					.where(eq(reviewPlans.id, plan.id));
-				return { ok: true as const, applied: true as const };
-			}
-		}
-
-		// Queue: keep the old value, notify the teacher.
 		await db.insert(planChangeRequests).values({
 			reviewPlanId: plan.id,
 			studentId: u.id,
 			teacherId: plan.teacherId,
 			field: data.field,
-			proposedDailyAmount:
-				data.field === "daily_amount" ? (data.dailyAmount ?? null) : null,
-			proposedStartPage:
-				data.field === "start_page" ? (data.startPage ?? null) : null,
+			proposedDailyAmount: data.field === "daily_amount" ? proposed : null,
+			proposedStartPage: data.field === "start_page" ? proposed : null,
 			status: "pending",
 		});
 		await notifyPlanChange(
@@ -670,7 +745,7 @@ export const requestPlanChange = createServerFn({ method: "POST" })
 			"plan_change_requested",
 			"طلب تعديل الخطة",
 			`${u.name} يطلب تعديل خطته`,
-			`plan_change:${plan.id}:${data.field}`,
+			`plan_change:${plan.id}:${data.field}:${proposed}`,
 		);
 		return { ok: true as const, applied: false as const };
 	});
@@ -772,7 +847,7 @@ export const respondPlanChange = createServerFn({ method: "POST" })
 		return { ok: true as const };
 	});
 
-/** Teacher: log a memorization session. */
+/** Teacher: log a page-based memorization session. */
 export const createSession = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
@@ -781,25 +856,33 @@ export const createSession = createServerFn({ method: "POST" })
 			sessionTime: z.string().optional(),
 			notes: z.string().optional(),
 			evaluation: z.string().optional(),
-			...rangeFields,
+			...pageRangeFields,
 		}),
 	)
 	.handler(async ({ data }) => {
 		const teacher = await requireUser();
-		const { getSurahName } = await import("@quran/db/domain/surahs");
+		const { getSurahNameForPage, getSurahNumberForPage } = await import(
+			"@quran/db/domain/surahs"
+		);
 		const { sessionRecords } = await import(
 			"@quran/db/tables/session-record.drizzle"
 		);
+		const startPage = Math.min(data.startPage, data.endPage);
+		const endPage = Math.max(data.startPage, data.endPage);
 		await db.insert(sessionRecords).values({
 			studentId: data.studentId,
 			teacherId: teacher.id,
-			memorizedSurah: getSurahName(data.startSurahNumber, "ar"),
-			memorizedVerseFrom: data.startVerse,
-			startSurahNumber: data.startSurahNumber,
-			endSurahNumber: data.endSurahNumber,
-			endSurahName: getSurahName(data.endSurahNumber, "ar"),
-			memorizedVerseTo: data.endVerse,
-			rangeMode: data.rangeMode,
+			// memorized* / verse columns are NOT NULL legacy fields; the session is
+			// page-based, so derive a surah label and store 0 for the verse columns.
+			memorizedSurah: getSurahNameForPage(startPage, "ar"),
+			memorizedVerseFrom: 0,
+			memorizedVerseTo: 0,
+			startSurahNumber: getSurahNumberForPage(startPage),
+			endSurahNumber: getSurahNumberForPage(endPage),
+			endSurahName: getSurahNameForPage(endPage, "ar"),
+			rangeMode: "pages",
+			startPage,
+			endPage,
 			sessionDate: data.sessionDate,
 			sessionTime: data.sessionTime ?? null,
 			notes: data.notes ?? null,
@@ -821,28 +904,19 @@ export const getSubmitReviewData = createServerFn({ method: "GET" })
 		return { review: review ?? null };
 	});
 
-/** Student: submit a completion → records submission, completes review, scores it. */
+/** Student: report page progress → completes + scores the review once the target is met. */
 export const submitReview = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			reviewId: z.string(),
-			rangeMode: z.enum(["verses", "pages"]).default("verses"),
-			startSurahNumber: z.number().int().optional(),
-			startVerse: z.number().int().optional(),
-			endSurahNumber: z.number().int().optional(),
-			endVerse: z.number().int().optional(),
-			// pages-mode: the absolute page the student has reached now
+			// the absolute page the student has reached now
 			currentPage: z.number().int().min(1).max(MUSHAF_PAGES).optional(),
 		}),
 	)
 	.handler(async ({ data }) => {
 		const u = await requireUser();
-		const { getSurahName } = await import("@quran/db/domain/surahs");
 		const { calculatePoints, nextStreak, applyPoints } = await import(
 			"@quran/db/domain/scoring"
-		);
-		const { reviewSubmissions } = await import(
-			"@quran/db/tables/review-submission.drizzle"
 		);
 		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
 
@@ -857,86 +931,56 @@ export const submitReview = createServerFn({ method: "POST" })
 		const streakLastDate =
 			(u as { streakLastDate?: string | null }).streakLastDate ?? null;
 
-		// Pages mode: cumulative actual-progress. The student reports the page
-		// reached now; progress is monotonic. Points are awarded once, the moment
-		// the day's target is first met; status stays pending until the cron
-		// finalizes at day-end so the review remains submittable for overachieving.
-		if (review.rangeMode === "pages") {
-			const dayStart = review.startPage ?? 1;
-			const dayEnd = review.endPage ?? dayStart;
-			const reported = Math.min(
-				Math.max(data.currentPage ?? dayEnd, dayStart),
-				MUSHAF_PAGES,
-			);
-			const progressPage = Math.max(
-				review.progressPage ?? dayStart - 1,
-				reported,
-			);
-			const targetMet = progressPage >= dayEnd;
-			const alreadyScored = review.completedAt != null;
+		// The student reports the page reached now — editable up or down so a
+		// mistaken entry can be corrected, but never below the day's start page.
+		// Points are awarded once, the moment the day's target is first met; status
+		// stays pending until the cron finalizes at day-end so the review remains
+		// submittable for overachieving.
+		const dayStart = review.startPage ?? 1;
+		const dayEnd = review.endPage ?? dayStart;
+		const progressPage = Math.min(
+			Math.max(data.currentPage ?? dayEnd, dayStart),
+			MUSHAF_PAGES,
+		);
+		const targetMet = progressPage >= dayEnd;
+		const alreadyScored = review.completedAt != null;
 
-			let earned = review.pointsEarned;
-			if (targetMet && !alreadyScored) {
-				[earned] = calculatePoints(review.assignedDate, todayStr);
-				await db
-					.update(reviews)
-					.set({ progressPage, completedAt: new Date(), pointsEarned: earned })
-					.where(eq(reviews.id, review.id));
-				const newPoints = applyPoints(u.points, earned);
-				const newStreak = nextStreak(u.streak, streakLastDate, todayStr);
-				await db
-					.update(userTable)
-					.set({
-						points: newPoints,
-						streak: newStreak,
-						streakLastDate: todayStr,
-					})
-					.where(eq(userTable.id, u.id));
-			} else {
-				await db
-					.update(reviews)
-					.set({ progressPage })
-					.where(eq(reviews.id, review.id));
-			}
-			return { ok: true as const, earned, progressPage, targetMet };
-		}
-
-		// Verses mode: record the verse-range submission and complete once.
-		if (
-			data.startSurahNumber != null &&
-			data.startVerse != null &&
-			data.endSurahNumber != null &&
-			data.endVerse != null
-		)
-			await db.insert(reviewSubmissions).values({
-				reviewId: review.id,
-				studentId: u.id,
-				startSurahNumber: data.startSurahNumber,
-				startSurahName: getSurahName(data.startSurahNumber, "ar"),
-				startVerse: data.startVerse,
-				endSurahNumber: data.endSurahNumber,
-				endSurahName: getSurahName(data.endSurahNumber, "ar"),
-				endVerse: data.endVerse,
-			});
-
-		const [earned] = calculatePoints(review.assignedDate, todayStr);
-		if (review.status !== "completed") {
+		let earned = review.pointsEarned;
+		if (targetMet && !alreadyScored) {
+			[earned] = calculatePoints(review.assignedDate, todayStr);
 			await db
 				.update(reviews)
-				.set({
-					status: "completed",
-					completedAt: new Date(),
-					pointsEarned: earned,
-				})
+				.set({ progressPage, completedAt: new Date(), pointsEarned: earned })
 				.where(eq(reviews.id, review.id));
 			const newPoints = applyPoints(u.points, earned);
 			const newStreak = nextStreak(u.streak, streakLastDate, todayStr);
 			await db
 				.update(userTable)
-				.set({ points: newPoints, streak: newStreak, streakLastDate: todayStr })
+				.set({
+					points: newPoints,
+					streak: newStreak,
+					streakLastDate: todayStr,
+				})
 				.where(eq(userTable.id, u.id));
+		} else {
+			await db
+				.update(reviews)
+				.set({ progressPage })
+				.where(eq(reviews.id, review.id));
 		}
-		return { ok: true as const, earned, targetMet: true };
+
+		// Doing/editing an older review changes the "last page read", so re-derive
+		// the page windows of any later reviews on this plan from the new progress.
+		if (review.reviewPlanId) {
+			const { recalcFutureReviews } = await import("./scheduler.ts");
+			await recalcFutureReviews(review.reviewPlanId, {
+				assignedDate: review.assignedDate,
+				progressPage,
+				startPage: review.startPage,
+				endPage: review.endPage,
+			});
+		}
+		return { ok: true as const, earned, progressPage, targetMet };
 	});
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "invalid_time");

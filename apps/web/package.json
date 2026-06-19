@@ -7,6 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "seed": "node --env-file=../../.env --import tsx/esm scripts/seed.ts",
+    "reset:today": "node --env-file=../../.env --import tsx/esm scripts/reset-today.ts --days=3",
     "verify": "node --import tsx/esm scripts/verify.ts",
     "icons": "node --import tsx/esm scripts/generate-icons.ts",
     "auth:generate": "pnpm dlx @better-auth/cli generate --config ./src/lib/auth.ts --output ../../packages/db/src/tables/auth.drizzle.ts",
@@ -17,7 +18,6 @@
   "dependencies": {
     "@capacitor/core": "^8.4.0",
     "@capacitor/push-notifications": "^8.1.1",
-    "@capgo/capacitor-updater": "^8.49.1",
     "@quran/db": "workspace:*",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-query": "catalog:",

@@ -11,7 +11,33 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 	return out;
 }
 
-export type PushResult = "subscribed" | "denied" | "unsupported" | "no-vapid";
+export type PushResult =
+	| "subscribed"
+	| "denied"
+	| "unsupported"
+	| "no-vapid"
+	| "ios-install";
+
+/**
+ * True on iOS/iPadOS Safari when the app is NOT yet installed to the home
+ * screen. Apple only exposes Web Push to installed PWAs (iOS 16.4+), so in a
+ * plain Safari tab `PushManager` is missing — we surface an "Add to Home
+ * Screen" hint instead of a generic "unsupported".
+ */
+export function isIosNeedingInstall(): boolean {
+	if (typeof window === "undefined" || typeof navigator === "undefined")
+		return false;
+	const isIOS =
+		/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+		// iPadOS 13+ reports as desktop Safari; detect by touch instead.
+		(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+	if (!isIOS) return false;
+	const standalone =
+		// biome-ignore lint/suspicious/noExplicitAny: non-standard iOS Safari flag
+		(navigator as any).standalone === true ||
+		window.matchMedia("(display-mode: standalone)").matches;
+	return !standalone;
+}
 
 /**
  * Register the service worker, request notification permission, subscribe to
@@ -24,7 +50,7 @@ export async function enablePush(): Promise<PushResult> {
 		!("serviceWorker" in navigator) ||
 		!("PushManager" in window)
 	) {
-		return "unsupported";
+		return isIosNeedingInstall() ? "ios-install" : "unsupported";
 	}
 	const { key } = await getVapidPublicKey();
 	if (!key) return "no-vapid";

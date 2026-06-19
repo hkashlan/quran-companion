@@ -1,4 +1,10 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
+import {
+	createContext,
+	type ReactNode,
+	useContext,
+	useEffect,
+	useState,
+} from "react";
 
 /**
  * Lightweight typed i18n (AR/EN/DE) with RTL handling. Interim layer that keeps
@@ -70,11 +76,23 @@ const messages: Record<Locale, Dict> = {
 		"settings.timezone": "المنطقة الزمنية",
 		"settings.changePassword": "تغيير كلمة المرور",
 		"settings.enableNotifications": "تفعيل الإشعارات",
+		"push.subscribed": "✓ تم تفعيل الإشعارات",
+		"push.denied": "تم رفض الإذن. فعّل الإشعارات من إعدادات جهازك.",
+		"push.unsupported": "هذا المتصفح لا يدعم الإشعارات.",
+		"push.no-vapid": "الإشعارات غير مهيأة على الخادم.",
+		"push.ios-install":
+			"لتلقّي التنبيهات على الآيفون: اضغط زر المشاركة ثم «أضف إلى الشاشة الرئيسية»، وافتح التطبيق من هناك.",
 		"settings.logout": "تسجيل الخروج",
 		"settings.version": "إصدار التطبيق",
 		"notifications.title": "الإشعارات",
 		"notifications.markAllRead": "تعليم الكل كمقروء",
 		"notifications.empty": "لا توجد إشعارات",
+		"notifications.unread": "غير المقروءة",
+		"notifications.all": "الكل",
+		"notifications.noUnread": "لا إشعارات غير مقروءة",
+		"notifications.deleteAll": "حذف الكل",
+		"notifications.delete": "حذف",
+		"notifications.confirmDeleteAll": "حذف جميع الإشعارات؟",
 		"auth.login": "تسجيل الدخول",
 		"auth.email": "البريد الإلكتروني",
 		"auth.password": "كلمة المرور",
@@ -173,6 +191,7 @@ const messages: Record<Locale, Dict> = {
 		"planReq.daily": "المقدار اليومي",
 		"planReq.start": "صفحة البداية",
 		"session.title": "إضافة جلسة",
+		"session.endPage": "صفحة النهاية",
 		"session.date": "التاريخ",
 		"session.time": "الوقت",
 		"session.notes": "ملاحظات",
@@ -192,6 +211,12 @@ const messages: Record<Locale, Dict> = {
 		"submit.pagesHint": "هدف اليوم: ص {from}–{to} · وصلت إلى {reached}",
 		"submit.savedKeepGoing": "تم الحفظ، يمكنك المتابعة",
 		"home.reachedPage": "وصلت إلى ص {page}",
+		"home.pagesOfTarget": "{done} / {total} صفحة اليوم",
+		"home.streakDays": "{streak} يوم متتالٍ",
+		"home.motivDone": "أحسنت! أنجزت مهمة اليوم",
+		"home.motivAlmost": "اقتربت، واصِل!",
+		"home.motivStreak": "حافظ على تتابعك!",
+		"home.motivStart": "هيا لنبدأ",
 	},
 	en: {
 		appName: "Quran Companion",
@@ -248,11 +273,24 @@ const messages: Record<Locale, Dict> = {
 		"settings.timezone": "Timezone",
 		"settings.changePassword": "Change Password",
 		"settings.enableNotifications": "Enable notifications",
+		"push.subscribed": "✓ Notifications enabled",
+		"push.denied":
+			"Permission denied — enable notifications in your device settings.",
+		"push.unsupported": "This browser doesn't support notifications.",
+		"push.no-vapid": "Notifications aren't configured on the server.",
+		"push.ios-install":
+			"To get reminders on iPhone: tap the Share button, then “Add to Home Screen”, and open the app from there.",
 		"settings.logout": "Log out",
 		"settings.version": "App Version",
 		"notifications.title": "Notifications",
 		"notifications.markAllRead": "Mark all read",
 		"notifications.empty": "No notifications",
+		"notifications.unread": "Unread",
+		"notifications.all": "All",
+		"notifications.noUnread": "No unread notifications",
+		"notifications.deleteAll": "Delete all",
+		"notifications.delete": "Delete",
+		"notifications.confirmDeleteAll": "Delete all notifications?",
 		"auth.login": "Log in",
 		"auth.email": "Email",
 		"auth.password": "Password",
@@ -351,6 +389,7 @@ const messages: Record<Locale, Dict> = {
 		"planReq.daily": "Daily amount",
 		"planReq.start": "Start page",
 		"session.title": "Add Session",
+		"session.endPage": "End page",
 		"session.date": "Date",
 		"session.time": "Time",
 		"session.notes": "Notes",
@@ -370,6 +409,12 @@ const messages: Record<Locale, Dict> = {
 		"submit.pagesHint": "Today's target: pp. {from}–{to} · reached {reached}",
 		"submit.savedKeepGoing": "Saved — keep going",
 		"home.reachedPage": "reached p. {page}",
+		"home.pagesOfTarget": "{done} / {total} pages today",
+		"home.streakDays": "{streak}-day streak",
+		"home.motivDone": "Done for today! Great job",
+		"home.motivAlmost": "Almost there, keep going!",
+		"home.motivStreak": "Keep your streak alive!",
+		"home.motivStart": "Let's get started",
 	},
 	de: {
 		appName: "Quran-Begleiter",
@@ -426,11 +471,24 @@ const messages: Record<Locale, Dict> = {
 		"settings.timezone": "Zeitzone",
 		"settings.changePassword": "Passwort ändern",
 		"settings.enableNotifications": "Mitteilungen aktivieren",
+		"push.subscribed": "✓ Mitteilungen aktiviert",
+		"push.denied":
+			"Berechtigung verweigert – aktiviere Mitteilungen in den Geräteeinstellungen.",
+		"push.unsupported": "Dieser Browser unterstützt keine Mitteilungen.",
+		"push.no-vapid": "Mitteilungen sind auf dem Server nicht konfiguriert.",
+		"push.ios-install":
+			"Für Mitteilungen auf dem iPhone: Teilen-Symbol antippen, dann „Zum Home-Bildschirm“, und die App von dort öffnen.",
 		"settings.logout": "Abmelden",
 		"settings.version": "App-Version",
 		"notifications.title": "Mitteilungen",
 		"notifications.markAllRead": "Alle gelesen",
 		"notifications.empty": "Keine Mitteilungen",
+		"notifications.unread": "Ungelesen",
+		"notifications.all": "Alle",
+		"notifications.noUnread": "Keine ungelesenen Benachrichtigungen",
+		"notifications.deleteAll": "Alle löschen",
+		"notifications.delete": "Löschen",
+		"notifications.confirmDeleteAll": "Alle Benachrichtigungen löschen?",
 		"auth.login": "Anmelden",
 		"auth.email": "E-Mail",
 		"auth.password": "Passwort",
@@ -529,6 +587,7 @@ const messages: Record<Locale, Dict> = {
 		"planReq.daily": "Tagespensum",
 		"planReq.start": "Startseite",
 		"session.title": "Sitzung hinzufügen",
+		"session.endPage": "Endseite",
 		"session.date": "Datum",
 		"session.time": "Zeit",
 		"session.notes": "Notizen",
@@ -548,11 +607,35 @@ const messages: Record<Locale, Dict> = {
 		"submit.pagesHint": "Heutiges Ziel: S. {from}–{to} · erreicht {reached}",
 		"submit.savedKeepGoing": "Gespeichert — weiter so",
 		"home.reachedPage": "erreicht S. {page}",
+		"home.pagesOfTarget": "{done} / {total} Seiten heute",
+		"home.streakDays": "{streak} Tage in Folge",
+		"home.motivDone": "Heute geschafft! Super",
+		"home.motivAlmost": "Fast geschafft, weiter so!",
+		"home.motivStreak": "Halte deine Serie!",
+		"home.motivStart": "Auf geht's",
 	},
 };
 
 export function isRtl(locale: Locale): boolean {
 	return locale === "ar";
+}
+
+const STORAGE_KEY = "locale";
+
+function isLocale(value: string | null): value is Locale {
+	return value === "ar" || value === "en" || value === "de";
+}
+
+function readStoredLocale(): Locale | null {
+	if (typeof window === "undefined") return null;
+	const stored = window.localStorage.getItem(STORAGE_KEY);
+	return isLocale(stored) ? stored : null;
+}
+
+function applyDocumentLocale(locale: Locale) {
+	if (typeof document === "undefined") return;
+	document.documentElement.lang = locale;
+	document.documentElement.dir = isRtl(locale) ? "rtl" : "ltr";
 }
 
 type I18nCtx = {
@@ -571,7 +654,26 @@ export function I18nProvider({
 	initialLocale?: Locale;
 	children: ReactNode;
 }) {
-	const [locale, setLocale] = useState<Locale>(initialLocale);
+	const [locale, setLocaleState] = useState<Locale>(initialLocale);
+
+	// Read the persisted locale after mount so the server-rendered markup (which
+	// always uses initialLocale) matches the first client render — avoids a
+	// hydration mismatch — then reconcile on the client.
+	useEffect(() => {
+		const stored = readStoredLocale();
+		if (stored && stored !== locale) setLocaleState(stored);
+		applyDocumentLocale(stored ?? locale);
+		// Run once on mount.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	const setLocale = (l: Locale) => {
+		setLocaleState(l);
+		if (typeof window !== "undefined")
+			window.localStorage.setItem(STORAGE_KEY, l);
+		applyDocumentLocale(l);
+	};
+
 	const t = (key: string, vars?: Record<string, string | number>) => {
 		let s = messages[locale][key] ?? messages.en[key] ?? key;
 		if (vars)
