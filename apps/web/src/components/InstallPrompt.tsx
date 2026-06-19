@@ -9,12 +9,14 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { isIosNeedingInstall } from "@/lib/push-client";
 
-const DISMISS_KEY = "install-dismissed";
-
 /**
  * Dismissible "install this app" banner. Shows an Install button on
  * Chrome/Android/desktop (fires the native prompt) and manual "Add to Home
- * Screen" guidance on iOS Safari. Hidden when already installed or dismissed.
+ * Screen" guidance on iOS Safari. Hidden when already installed.
+ *
+ * Dismissing only hides the banner for the current session — as long as the
+ * app isn't installed, it reappears on the next load so users keep getting
+ * nudged to install.
  */
 export function InstallPrompt() {
 	const { t } = useI18n();
@@ -31,11 +33,7 @@ export function InstallPrompt() {
 	const [ios, setIos] = useState(false);
 
 	useEffect(() => {
-		try {
-			setDismissed(localStorage.getItem(DISMISS_KEY) === "1");
-		} catch {
-			setDismissed(false);
-		}
+		setDismissed(false);
 		setIos(isIosNeedingInstall());
 	}, []);
 
@@ -45,11 +43,6 @@ export function InstallPrompt() {
 
 	const dismiss = () => {
 		setDismissed(true);
-		try {
-			localStorage.setItem(DISMISS_KEY, "1");
-		} catch {
-			// Storage unavailable (e.g. sandboxed browser) — banner just reappears.
-		}
 	};
 
 	const install = async () => {
