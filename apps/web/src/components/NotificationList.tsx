@@ -2,6 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Segmented } from "@/components/pickers";
+import { ConfirmDialog } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import {
 	deleteAllNotifications,
@@ -46,6 +47,8 @@ export function NotificationList({ items }: { items: NotificationItem[] }) {
 	const router = useRouter();
 	// Default to showing only unread notifications.
 	const [filter, setFilter] = useState<"unread" | "all">("unread");
+	const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
+	const [deletingAll, setDeletingAll] = useState(false);
 
 	async function open(n: NotificationItem) {
 		if (!n.isRead) await markNotificationRead({ data: { id: n.id } });
@@ -65,8 +68,10 @@ export function NotificationList({ items }: { items: NotificationItem[] }) {
 	}
 
 	async function removeAll() {
-		if (!window.confirm(t("notifications.confirmDeleteAll"))) return;
+		setDeletingAll(true);
 		await deleteAllNotifications();
+		setDeletingAll(false);
+		setConfirmingDeleteAll(false);
 		router.invalidate();
 	}
 
@@ -97,7 +102,11 @@ export function NotificationList({ items }: { items: NotificationItem[] }) {
 						{t("notifications.markAllRead")}
 					</button>
 				) : null}
-				<button type="button" onClick={removeAll} className="text-error">
+				<button
+					type="button"
+					onClick={() => setConfirmingDeleteAll(true)}
+					className="text-error"
+				>
 					{t("notifications.deleteAll")}
 				</button>
 			</div>
@@ -143,6 +152,16 @@ export function NotificationList({ items }: { items: NotificationItem[] }) {
 					))}
 				</div>
 			)}
+
+			<ConfirmDialog
+				open={confirmingDeleteAll}
+				message={t("notifications.confirmDeleteAll")}
+				confirmLabel={t("notifications.deleteAll")}
+				cancelLabel={t("common.cancel")}
+				loading={deletingAll}
+				onConfirm={removeAll}
+				onCancel={() => setConfirmingDeleteAll(false)}
+			/>
 		</div>
 	);
 }

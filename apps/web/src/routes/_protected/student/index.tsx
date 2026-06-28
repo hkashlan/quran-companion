@@ -10,7 +10,14 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DailyProgress } from "@/components/DailyProgress";
-import { Button, Card, Section, StatCard, TextInput } from "@/components/ui";
+import {
+	Button,
+	Card,
+	ConfirmDialog,
+	Section,
+	StatCard,
+	TextInput,
+} from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { reviewRange } from "@/lib/review-range";
 import {
@@ -148,10 +155,16 @@ function StudentHome() {
 	const [joinMsg, setJoinMsg] = useState<{ text: string; ok: boolean } | null>(
 		null,
 	);
+	// Circle pending a leave confirmation, or null when the dialog is closed.
+	const [leavingId, setLeavingId] = useState<string | null>(null);
+	const [leaving, setLeaving] = useState(false);
 
-	async function leave(circleId: string) {
-		if (!window.confirm(t("home.leaveConfirm"))) return;
-		await leaveCircleFn({ data: { circleId } });
+	async function confirmLeave() {
+		if (!leavingId) return;
+		setLeaving(true);
+		await leaveCircleFn({ data: { circleId: leavingId } });
+		setLeaving(false);
+		setLeavingId(null);
 		router.invalidate();
 	}
 
@@ -278,7 +291,7 @@ function StudentHome() {
 								) : null}
 								<button
 									type="button"
-									onClick={() => leave(c.id)}
+									onClick={() => setLeavingId(c.id)}
 									className="mt-1 flex items-center gap-1 self-start rounded-md px-2 py-1 text-[12px] font-semibold text-error active:bg-error/10"
 								>
 									<LogOut size={13} /> {t("home.leave")}
@@ -383,6 +396,16 @@ function StudentHome() {
 					</Card>
 				</Section>
 			) : null}
+
+			<ConfirmDialog
+				open={leavingId !== null}
+				message={t("home.leaveConfirm")}
+				confirmLabel={t("home.leave")}
+				cancelLabel={t("common.cancel")}
+				loading={leaving}
+				onConfirm={confirmLeave}
+				onCancel={() => setLeavingId(null)}
+			/>
 		</div>
 	);
 }
