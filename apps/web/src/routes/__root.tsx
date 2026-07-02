@@ -23,6 +23,8 @@ export const Route = createRootRoute({
 			{ rel: "stylesheet", href: appCss },
 			{ rel: "manifest", href: "/manifest.webmanifest" },
 			{ rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+			// iOS ignores the manifest for "Add to Home Screen" and uses this.
+			{ rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
 		],
 	}),
 	component: RootComponent,

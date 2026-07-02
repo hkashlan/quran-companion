@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { signOut } from "@/lib/auth-client";
@@ -37,11 +38,20 @@ function SettingsScreen() {
 		<div className="flex flex-col gap-4 p-4">
 			<h1 className="text-[22px] font-bold text-text">{t("settings.title")}</h1>
 
-			<Card className="flex items-center gap-3">
-				<div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white">
-					{user.name.slice(0, 1)}
-				</div>
-				<span className="text-[16px] font-bold text-text">{user.name}</span>
+			<Card className="p-0">
+				<button
+					type="button"
+					onClick={() => navigate({ to: "/change-name" })}
+					className="flex w-full items-center gap-3 p-4 text-start active:opacity-80"
+				>
+					<div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white">
+						{user.name.slice(0, 1)}
+					</div>
+					<span className="flex-1 text-[16px] font-bold text-text">
+						{user.name}
+					</span>
+					<Pencil size={18} className="text-text-light" />
+				</button>
 			</Card>
 
 			<div className="flex flex-col gap-2">
