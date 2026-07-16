@@ -235,6 +235,89 @@ export async function runDailyScheduler(today: string) {
 	return { plans: plans.length, created, missed, notified };
 }
 
+/**
+ * End-of-day summary pushed to each teacher: how many of their students finished,
+ * are mid-review, or haven't started today. Invoked by /api/cron/teacher-summary
+ * (see apps/web/vercel.json). One notification per teacher, deduped per day so a
+ * retried run doesn't double-send. Returns a summary for the cron response/logs.
+ */
+export async function runTeacherSummary(today: string) {
+	// Today's reviews, newest-first so the first row we see per (teacher, student)
+	// is the current one (mirrors getTeacherToday's dedupe).
+	const rows = await db
+		.select({
+			teacherId: reviews.teacherId,
+			studentId: reviews.studentId,
+			startPage: reviews.startPage,
+			endPage: reviews.endPage,
+			progressPage: reviews.progressPage,
+			status: reviews.status,
+		})
+		.from(reviews)
+		.where(eq(reviews.assignedDate, today))
+		.orderBy(desc(reviews.createdAt));
+
+	type Row = (typeof rows)[number];
+	// teacherId → (studentId → newest review), keeping only the first row per student.
+	const byTeacher = new Map<string, Map<string, Row>>();
+	for (const r of rows) {
+		let students = byTeacher.get(r.teacherId);
+		if (!students) {
+			students = new Map();
+			byTeacher.set(r.teacherId, students);
+		}
+		if (!students.has(r.studentId)) students.set(r.studentId, r);
+	}
+
+	let teachers = 0;
+	let notified = 0;
+	for (const [teacherId, students] of byTeacher) {
+		teachers += 1;
+		const total = students.size;
+		let completed = 0;
+		let notStarted = 0;
+		for (const r of students.values()) {
+			const end = r.endPage ?? r.startPage ?? 0;
+			if (
+				r.status === "completed" ||
+				(r.progressPage != null && r.progressPage >= end)
+			) {
+				completed += 1;
+			} else if (r.progressPage == null) {
+				notStarted += 1;
+			}
+		}
+		const inProgress = total - completed - notStarted;
+
+		const title = "ملخص اليوم";
+		const body = `أتمّ ${completed} من ${total} · قيد المراجعة ${inProgress} · لم يبدأ ${notStarted}`;
+		// dedupeKey is unique so a retried run doesn't double-send.
+		const inserted = await db
+			.insert(notificationDeliveries)
+			.values({
+				userId: teacherId,
+				eventType: "teacher_daily_summary",
+				title,
+				body,
+				status: "sent",
+				dedupeKey: `teacher_summary:${teacherId}:${today}`,
+				sentAt: new Date(),
+			})
+			.onConflictDoNothing({ target: notificationDeliveries.dedupeKey })
+			.returning({ id: notificationDeliveries.id });
+		if (inserted.length > 0) {
+			await sendPush(teacherId, {
+				title,
+				body,
+				data: { url: "/teacher/leaderboard" },
+			});
+			notified += 1;
+		}
+	}
+
+	return { teachers, notified };
+}
+
 /** Convenience: list students with notifications enabled (has any active push token). */
 export async function activeStudentCount(): Promise<number> {
 	const rows = await db

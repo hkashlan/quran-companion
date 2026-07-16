@@ -325,7 +325,8 @@ export const getTeacherToday = createServerFn({ method: "GET" }).handler(
 			.orderBy(desc(reviews.createdAt));
 		const reviewByStudent = new Map<string, (typeof todayReviews)[number]>();
 		for (const r of todayReviews) {
-			if (!reviewByStudent.has(r.studentId)) reviewByStudent.set(r.studentId, r);
+			if (!reviewByStudent.has(r.studentId))
+				reviewByStudent.set(r.studentId, r);
 		}
 
 		const withStudents = await Promise.all(
@@ -1095,6 +1096,44 @@ export const submitReview = createServerFn({ method: "POST" })
 				startPage: review.startPage,
 				endPage: review.endPage,
 			});
+		}
+
+		// Notify the teacher that the student recorded new progress. Only when the
+		// page actually moved (skip no-op resubmits), and deduped per page so the
+		// same page is never announced twice while a new page always is.
+		if (progressPage !== review.progressPage) {
+			const { notificationDeliveries } = await import(
+				"@quran/db/tables/notification-delivery.drizzle"
+			);
+			const targetPages = Math.max(dayEnd - dayStart + 1, 1);
+			const donePages = Math.min(
+				Math.max(progressPage - dayStart + 1, 0),
+				targetPages,
+			);
+			const title = "تحديث تقدم الطالب";
+			const body = targetMet
+				? `${u.name} أتمّ مراجعة اليوم (ص ${progressPage})`
+				: `${u.name} وصل إلى ص ${progressPage} (${donePages}/${targetPages})`;
+			const inserted = await db
+				.insert(notificationDeliveries)
+				.values({
+					userId: review.teacherId,
+					eventType: "progress_update",
+					title,
+					body,
+					status: "sent",
+					dedupeKey: `progress_update:${review.id}:${progressPage}`,
+					sentAt: new Date(),
+				})
+				.onConflictDoNothing({ target: notificationDeliveries.dedupeKey })
+				.returning({ id: notificationDeliveries.id });
+			if (inserted.length > 0) {
+				await sendPush(review.teacherId, {
+					title,
+					body,
+					data: { url: `/student-detail?studentId=${review.studentId}` },
+				});
+			}
 		}
 		return { ok: true as const, earned, progressPage, targetMet };
 	});
