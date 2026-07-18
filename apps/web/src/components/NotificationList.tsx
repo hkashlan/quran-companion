@@ -22,10 +22,17 @@ type NotificationItem = {
 /** Where each notification type takes the user when tapped (null = not actionable). */
 function destFor(
 	eventType: string,
-): "/student" | "/student/plan" | "/teacher/requests" | "/teacher" | null {
+):
+	| "/student"
+	| "/student/plan"
+	| "/teacher/requests"
+	| "/teacher"
+	| "/teacher/late-students"
+	| null {
 	switch (eventType) {
 		case "review_assigned":
 		case "review_reminder":
+		case "teacher_message":
 			return "/student";
 		case "plan_change_approved":
 		case "plan_change_rejected":
@@ -36,6 +43,9 @@ function destFor(
 			return "/teacher/requests";
 		case "plan_changed":
 			return "/teacher";
+		case "student_not_finished":
+			// Teacher: the screen to message students who are behind today.
+			return "/teacher/late-students";
 		default:
 			return null;
 	}

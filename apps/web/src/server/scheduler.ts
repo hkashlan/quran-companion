@@ -27,6 +27,7 @@ export type PlanForReview = {
 	studentId: string;
 	teacherId: string;
 	startPage: number | null;
+	endPage: number | null;
 	dailyAmount: number;
 	cursorReset: boolean;
 };
@@ -72,7 +73,11 @@ export async function ensureTodayReview(
 				last[0]?.endPage ?? null,
 			);
 	const { startPage, endPage } = nextPageWindow(
-		{ startPage: plan.startPage ?? 1, dailyAmount: plan.dailyAmount },
+		{
+			startPage: plan.startPage ?? 1,
+			endPage: plan.endPage,
+			dailyAmount: plan.dailyAmount,
+		},
 		reached,
 	);
 	await db.insert(reviews).values({
@@ -130,6 +135,7 @@ export async function recalcFutureReviews(
 	const [plan] = await db
 		.select({
 			startPage: reviewPlans.startPage,
+			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
 		})
 		.from(reviewPlans)
@@ -163,7 +169,11 @@ export async function recalcFutureReviews(
 			continue;
 		}
 		const { startPage, endPage } = nextPageWindow(
-			{ startPage: plan.startPage ?? 1, dailyAmount: plan.dailyAmount },
+			{
+				startPage: plan.startPage ?? 1,
+				endPage: plan.endPage,
+				dailyAmount: plan.dailyAmount,
+			},
 			cursor,
 		);
 		if (startPage !== r.startPage || endPage !== r.endPage) {
@@ -188,6 +198,7 @@ export async function runDailyScheduler(today: string) {
 			studentId: reviewPlans.studentId,
 			teacherId: reviewPlans.teacherId,
 			startPage: reviewPlans.startPage,
+			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
 			cursorReset: reviewPlans.cursorReset,
 		})
@@ -238,24 +249,30 @@ export async function runDailyScheduler(today: string) {
 }
 
 /**
- * End-of-day summary pushed to each teacher: how many of their students finished,
- * are mid-review, or haven't started today. Invoked by /api/cron/teacher-summary
- * (see apps/web/vercel.json). One notification per teacher, deduped per day so a
- * retried run doesn't double-send. Returns a summary for the cron response/logs.
+ * Evening reminder pushed to each teacher: one notification per student who
+ * still hasn't finished today's assigned review (not started or mid-review).
+ * Invoked hourly from 18:00–22:00 UTC by /api/cron/teacher-summary (see
+ * apps/web/vercel.json). The dedupe key includes the current `hour`, so a
+ * still-behind student re-notifies the teacher each hourly run, while a retried
+ * run within the same hour doesn't double-send. Tapping a notification opens the
+ * "message late students" screen (/teacher/late-students). Returns a summary for
+ * the cron response/logs.
  */
-export async function runTeacherSummary(today: string) {
-	// Today's reviews, newest-first so the first row we see per (teacher, student)
-	// is the current one (mirrors getTeacherToday's dedupe).
+export async function runTeacherSummary(today: string, hour: number) {
+	// Today's reviews joined with the student's name, newest-first so the first
+	// row we see per (teacher, student) is the current one (mirrors getTeacherToday).
 	const rows = await db
 		.select({
 			teacherId: reviews.teacherId,
 			studentId: reviews.studentId,
+			studentName: user.name,
 			startPage: reviews.startPage,
 			endPage: reviews.endPage,
 			progressPage: reviews.progressPage,
 			status: reviews.status,
 		})
 		.from(reviews)
+		.innerJoin(user, eq(reviews.studentId, user.id))
 		.where(eq(reviews.assignedDate, today))
 		.orderBy(desc(reviews.createdAt));
 
@@ -275,45 +292,40 @@ export async function runTeacherSummary(today: string) {
 	let notified = 0;
 	for (const [teacherId, students] of byTeacher) {
 		teachers += 1;
-		const total = students.size;
-		let completed = 0;
-		let notStarted = 0;
 		for (const r of students.values()) {
 			const end = r.endPage ?? r.startPage ?? 0;
-			if (
+			const finished =
 				r.status === "completed" ||
-				(r.progressPage != null && r.progressPage >= end)
-			) {
-				completed += 1;
-			} else if (r.progressPage == null) {
-				notStarted += 1;
-			}
-		}
-		const inProgress = total - completed - notStarted;
+				(r.progressPage != null && r.progressPage >= end);
+			// Only nag about students who are behind; finished ones are skipped.
+			if (finished) continue;
 
-		const title = "ملخص اليوم";
-		const body = `أتمّ ${completed} من ${total} · قيد المراجعة ${inProgress} · لم يبدأ ${notStarted}`;
-		// dedupeKey is unique so a retried run doesn't double-send.
-		const inserted = await db
-			.insert(notificationDeliveries)
-			.values({
-				userId: teacherId,
-				eventType: "teacher_daily_summary",
-				title,
-				body,
-				status: "sent",
-				dedupeKey: `teacher_summary:${teacherId}:${today}`,
-				sentAt: new Date(),
-			})
-			.onConflictDoNothing({ target: notificationDeliveries.dedupeKey })
-			.returning({ id: notificationDeliveries.id });
-		if (inserted.length > 0) {
-			await sendPush(teacherId, {
-				title,
-				body,
-				data: { url: "/teacher/leaderboard" },
-			});
-			notified += 1;
+			const title = r.studentName ?? "طالب";
+			const body = "لم يُنهِ مراجعة اليوم بعد";
+			// dedupeKey includes the hour so the teacher is re-notified each hourly
+			// run while the student is still behind, but a retried run in the same
+			// hour doesn't double-send.
+			const inserted = await db
+				.insert(notificationDeliveries)
+				.values({
+					userId: teacherId,
+					eventType: "student_not_finished",
+					title,
+					body,
+					status: "sent",
+					dedupeKey: `student_not_finished:${teacherId}:${r.studentId}:${today}:${hour}`,
+					sentAt: new Date(),
+				})
+				.onConflictDoNothing({ target: notificationDeliveries.dedupeKey })
+				.returning({ id: notificationDeliveries.id });
+			if (inserted.length > 0) {
+				await sendPush(teacherId, {
+					title,
+					body,
+					data: { url: "/teacher/late-students" },
+				});
+				notified += 1;
+			}
 		}
 	}
 

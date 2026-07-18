@@ -386,6 +386,131 @@ export const nudgeStudent = createServerFn({ method: "POST" })
 		return { ok: true as const };
 	});
 
+/**
+ * Teacher: students in my circles who haven't finished today's assigned review
+ * (not started or mid-review). Powers the "message late students" screen opened
+ * from the hourly per-student push (see runTeacherSummary).
+ */
+export const getLateStudents = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const circles = await listCirclesForUser(u.id);
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+
+		// Newest review per student today (first row wins, mirroring getTeacherToday).
+		const todayStr = today();
+		const todayReviews = await db
+			.select({
+				studentId: reviews.studentId,
+				startPage: reviews.startPage,
+				endPage: reviews.endPage,
+				progressPage: reviews.progressPage,
+				status: reviews.status,
+			})
+			.from(reviews)
+			.where(
+				and(eq(reviews.teacherId, u.id), eq(reviews.assignedDate, todayStr)),
+			)
+			.orderBy(desc(reviews.createdAt));
+		const reviewByStudent = new Map<string, (typeof todayReviews)[number]>();
+		for (const r of todayReviews) {
+			if (!reviewByStudent.has(r.studentId))
+				reviewByStudent.set(r.studentId, r);
+		}
+
+		const seen = new Set<string>();
+		const students: {
+			id: string;
+			name: string;
+			done: number;
+			target: number;
+		}[] = [];
+		for (const c of circles) {
+			const members = await db
+				.select({ id: userTable.id, name: userTable.name })
+				.from(circleMemberships)
+				.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+				.where(
+					and(
+						eq(circleMemberships.circleId, c.id),
+						eq(circleMemberships.role, "student"),
+					),
+				);
+			for (const s of members) {
+				if (seen.has(s.id)) continue;
+				const r = reviewByStudent.get(s.id);
+				// No plan/review today → nothing due, so not "late".
+				if (!r || r.startPage == null || r.endPage == null) continue;
+				const finished =
+					r.status === "completed" ||
+					(r.progressPage != null && r.progressPage >= r.endPage);
+				if (finished) continue;
+				const target = Math.max(1, r.endPage - r.startPage + 1);
+				const reached =
+					r.progressPage != null
+						? Math.max(r.progressPage - r.startPage + 1, 0)
+						: 0;
+				const done = Math.min(reached, target);
+				seen.add(s.id);
+				students.push({ id: s.id, name: s.name, done, target });
+			}
+		}
+		return { students };
+	},
+);
+
+/**
+ * Teacher: send a free-text message (emoji-friendly) to the selected students —
+ * used from the "late students" screen. Restricted to students that are actually
+ * in one of the teacher's circles. Each send is un-deduped (timestamped key) so a
+ * teacher can message again.
+ */
+export const messageLateStudents = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			studentIds: z.array(z.string()).min(1),
+			message: z.string().trim().min(1).max(500),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const circles = await listCirclesForUser(u.id);
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
+		// Only message students who are genuinely in one of my circles.
+		const mine = new Set<string>();
+		for (const c of circles) {
+			const members = await db
+				.select({ id: circleMemberships.userId })
+				.from(circleMemberships)
+				.where(
+					and(
+						eq(circleMemberships.circleId, c.id),
+						eq(circleMemberships.role, "student"),
+					),
+				);
+			for (const m of members) mine.add(m.id);
+		}
+		const targets = data.studentIds.filter((id) => mine.has(id));
+		const title = `رسالة من ${u.name}`;
+		const stamp = Date.now();
+		for (const studentId of targets) {
+			await notifyPlanChange(
+				studentId,
+				"teacher_message",
+				title,
+				data.message,
+				`teacher_message:${studentId}:${stamp}`,
+				"/student",
+			);
+		}
+		return { ok: true as const, sent: targets.length };
+	});
+
 /** Teacher: pending join requests across circles I own. */
 export const getJoinRequests = createServerFn({ method: "GET" }).handler(
 	async () => {
@@ -626,11 +751,17 @@ export const getStudentModalData = createServerFn({ method: "GET" })
 /** Teacher: create or update the student's active page-based review plan. */
 export const assignReviewPlan = createServerFn({ method: "POST" })
 	.validator(
-		z.object({
-			studentId: z.string(),
-			dailyAmount: z.number().int().min(1),
-			startPage: z.number().int().min(1).max(MUSHAF_PAGES),
-		}),
+		z
+			.object({
+				studentId: z.string(),
+				dailyAmount: z.number().int().min(1),
+				startPage: z.number().int().min(1).max(MUSHAF_PAGES),
+				endPage: z.number().int().min(1).max(MUSHAF_PAGES),
+			})
+			.refine((d) => d.endPage >= d.startPage, {
+				message: "endPage must be >= startPage",
+				path: ["endPage"],
+			}),
 	)
 	.handler(async ({ data }) => {
 		const teacher = await requireUser();
@@ -661,7 +792,7 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			endVerse: 1,
 			rangeMode: "pages",
 			startPage: data.startPage,
-			endPage: MUSHAF_PAGES,
+			endPage: data.endPage,
 			dailyAmount: data.dailyAmount,
 			dailyUnit: "pages",
 			isActive: true,
@@ -694,6 +825,7 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				studentId: values.studentId,
 				teacherId: values.teacherId,
 				startPage: values.startPage,
+				endPage: values.endPage,
 				dailyAmount: values.dailyAmount,
 				cursorReset: values.cursorReset,
 			},

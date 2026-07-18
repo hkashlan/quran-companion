@@ -116,28 +116,32 @@ export const MUSHAF_PAGES = 604;
 
 export type PagePlanLike = {
 	startPage: number;
+	/**
+	 * Last page of the plan's range. The day's window wraps back to `startPage`
+	 * once this page is reached. Defaults to the full mushaf (604) when
+	 * omitted/null (legacy plans that predate a configurable end page).
+	 */
+	endPage?: number | null;
 	dailyAmount: number;
 };
 
 /**
- * Page-mode cursor: a continuous run from the plan's start page to page 604,
+ * Page-mode cursor: a continuous run from the plan's start page to its end page,
  * wrapping back to the start page once the end is reached. The day's window is
- * clamped at 604 (it never spans the 604→start boundary); the next day restarts
- * at the start page. `lastEndPage` is the end of the most recent generated
- * review for this plan, or null for the first review.
+ * clamped at the plan's end page (it never spans the end→start boundary); the
+ * next day restarts at the start page. `lastEndPage` is the end of the most
+ * recent generated review for this plan, or null for the first review.
  */
 export function nextPageWindow(
 	plan: PagePlanLike,
 	lastEndPage: number | null,
 ): { startPage: number; endPage: number } {
+	const planEnd = plan.endPage ?? MUSHAF_PAGES;
 	const start =
-		lastEndPage == null || lastEndPage >= MUSHAF_PAGES
+		lastEndPage == null || lastEndPage >= planEnd
 			? plan.startPage
 			: lastEndPage + 1;
-	const endPage = Math.min(
-		start + Math.max(1, plan.dailyAmount) - 1,
-		MUSHAF_PAGES,
-	);
+	const endPage = Math.min(start + Math.max(1, plan.dailyAmount) - 1, planEnd);
 	return { startPage: start, endPage };
 }
 

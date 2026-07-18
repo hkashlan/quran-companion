@@ -153,6 +153,18 @@ describe("review-cycle page cursor", () => {
 		});
 	});
 
+	it("clamps the day's window at a custom plan end page", () => {
+		expect(
+			nextPageWindow({ startPage: 100, endPage: 110, dailyAmount: 10 }, 105),
+		).toEqual({ startPage: 106, endPage: 110 });
+	});
+
+	it("wraps back to the start page after reaching a custom end page", () => {
+		expect(
+			nextPageWindow({ startPage: 100, endPage: 110, dailyAmount: 10 }, 110),
+		).toEqual({ startPage: 100, endPage: 109 });
+	});
+
 	it("flags a later start page as needing approval", () => {
 		expect(isStartAdvance(100, 200)).toBe(true);
 		expect(isStartAdvance(100, 50)).toBe(false);
