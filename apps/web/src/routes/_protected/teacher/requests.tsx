@@ -1,4 +1,8 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	useNavigate,
+	useRouter,
+} from "@tanstack/react-router";
 import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -22,10 +26,21 @@ export const Route = createFileRoute("/_protected/teacher/requests")({
 function RequestsScreen() {
 	const { t } = useI18n();
 	const router = useRouter();
+	const navigate = useNavigate();
 	const { requests, planChanges } = Route.useLoaderData();
 
 	async function respond(id: string, status: "approved" | "rejected") {
-		await respondJoinRequest({ data: { id, status } });
+		const res = await respondJoinRequest({ data: { id, status } });
+		// After approving a student, send the teacher straight to the assign-plan
+		// screen for that student instead of just refreshing the list.
+		if (
+			status === "approved" &&
+			res.requestedRole === "student" &&
+			res.userId
+		) {
+			navigate({ to: "/assign-review", search: { studentId: res.userId } });
+			return;
+		}
 		router.invalidate();
 	}
 

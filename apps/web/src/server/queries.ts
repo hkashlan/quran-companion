@@ -441,7 +441,13 @@ export const respondJoinRequest = createServerFn({ method: "POST" })
 				role: req.requestedRole === "teacher" ? "teacher" : "student",
 			});
 		}
-		return { ok: true };
+		// Return the joiner so the teacher UI can send them straight to the
+		// assign-plan screen after approving a student.
+		return {
+			ok: true,
+			userId: req?.userId ?? null,
+			requestedRole: req?.requestedRole ?? null,
+		};
 	});
 
 /** Teacher: full detail for one student — info, active plan, reviews, sessions. */

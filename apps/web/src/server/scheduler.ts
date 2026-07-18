@@ -1,6 +1,8 @@
 import { db } from "@quran/db/db";
 import { lastReachedPage, nextPageWindow } from "@quran/db/domain/review-cycle";
 import { user } from "@quran/db/tables/auth.drizzle";
+import { joinRequests } from "@quran/db/tables/join-request.drizzle";
+import { learningCircles } from "@quran/db/tables/learning-circle.drizzle";
 import { notificationDeliveries } from "@quran/db/tables/notification-delivery.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { reviewPlans } from "@quran/db/tables/review-plan.drizzle";
@@ -310,6 +312,60 @@ export async function runTeacherSummary(today: string) {
 				title,
 				body,
 				data: { url: "/teacher/leaderboard" },
+			});
+			notified += 1;
+		}
+	}
+
+	return { teachers, notified };
+}
+
+/**
+ * End-of-day reminder pushed to each teacher who has students (or teachers)
+ * waiting to be let into one of their circles. One notification per teacher,
+ * deduped per day so a retried run doesn't double-send. Invoked alongside
+ * runTeacherSummary by /api/cron/teacher-summary (see apps/web/vercel.json).
+ * Returns a summary for the cron response/logs.
+ */
+export async function runPendingRequestsReminder(today: string) {
+	// Every pending join request, attributed to the owning teacher of its circle.
+	const rows = await db
+		.select({ teacherId: learningCircles.ownerTeacherId })
+		.from(joinRequests)
+		.innerJoin(learningCircles, eq(joinRequests.circleId, learningCircles.id))
+		.where(eq(joinRequests.status, "pending"));
+
+	// teacherId → count of pending requests across all their circles.
+	const byTeacher = new Map<string, number>();
+	for (const r of rows) {
+		byTeacher.set(r.teacherId, (byTeacher.get(r.teacherId) ?? 0) + 1);
+	}
+
+	let teachers = 0;
+	let notified = 0;
+	for (const [teacherId, pending] of byTeacher) {
+		teachers += 1;
+		const title = "طلبات انضمام معلّقة";
+		const body = `لديك ${pending} طلب انضمام بانتظار المراجعة`;
+		// dedupeKey is unique so a retried run doesn't double-send.
+		const inserted = await db
+			.insert(notificationDeliveries)
+			.values({
+				userId: teacherId,
+				eventType: "join_requests_pending",
+				title,
+				body,
+				status: "sent",
+				dedupeKey: `join_requests_pending:${teacherId}:${today}`,
+				sentAt: new Date(),
+			})
+			.onConflictDoNothing({ target: notificationDeliveries.dedupeKey })
+			.returning({ id: notificationDeliveries.id });
+		if (inserted.length > 0) {
+			await sendPush(teacherId, {
+				title,
+				body,
+				data: { url: "/teacher/requests" },
 			});
 			notified += 1;
 		}
