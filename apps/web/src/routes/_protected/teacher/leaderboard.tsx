@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, Check, ClipboardList, Crown, Flame } from "lucide-react";
+import { AlarmClock, Bell, Check, ClipboardList, Crown, Flame } from "lucide-react";
 import { useState } from "react";
 import { Ring } from "@/components/DailyProgress";
 import { useI18n } from "@/lib/i18n";
@@ -105,9 +105,17 @@ function TeacherLeaderboard() {
 
 	return (
 		<div className="flex flex-col gap-4 p-4">
-			<h1 className="text-[22px] font-bold text-text">
-				{t("leaderboard.today")}
-			</h1>
+			<div className="flex items-center justify-between gap-2">
+				<h1 className="text-[22px] font-bold text-text">
+					{t("leaderboard.today")}
+				</h1>
+				<Link
+					to="/teacher/late-students"
+					className="flex items-center gap-1.5 rounded-md bg-accent-light px-3 py-2 text-[12px] font-semibold text-text"
+				>
+					<AlarmClock size={16} /> {t("late.title")}
+				</Link>
+			</div>
 			<div className="flex flex-col gap-3">
 				{today.circles.map((c) => (
 					<div key={c.id} className="flex flex-col gap-2">
