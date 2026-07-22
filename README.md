@@ -35,3 +35,5 @@ pnpm --filter @quran/db db:generate
 pnpm --filter @quran/db db:migrate
 pnpm dev                    # apps/web on http://localhost:3000
 ```
+
+

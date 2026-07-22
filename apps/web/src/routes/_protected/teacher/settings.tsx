@@ -1,8 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { signOut } from "@/lib/auth-client";
+import { enableFirebasePush } from "@/lib/firebase-push";
 import { LOCALE_LABEL, LOCALES, type Locale, useI18n } from "@/lib/i18n";
+import { isIosNeedingInstall, type PushResult } from "@/lib/push-client";
 import { getMe } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/teacher/settings")({
@@ -14,10 +17,17 @@ function TeacherSettings() {
 	const { t, locale, setLocale } = useI18n();
 	const navigate = useNavigate();
 	const me = Route.useLoaderData();
+	const [pushMsg, setPushMsg] = useState<PushResult | null>(null);
+	const [iosHint, setIosHint] = useState(false);
+	useEffect(() => setIosHint(isIosNeedingInstall()), []);
 
 	async function logout() {
 		await signOut();
 		navigate({ to: "/login" });
+	}
+
+	async function notifications() {
+		setPushMsg(await enableFirebasePush());
 	}
 
 	return (
@@ -58,6 +68,22 @@ function TeacherSettings() {
 						</button>
 					))}
 				</div>
+			</div>
+			<div className="flex flex-col gap-2">
+				<Button variant="outline" onClick={notifications}>
+					{t("settings.enableNotifications")}
+				</Button>
+				{(pushMsg || iosHint) && (
+					<p
+						className={`text-[12px] leading-relaxed ${
+							pushMsg === "subscribed"
+								? "text-primary"
+								: "text-text-secondary"
+						}`}
+					>
+						{pushMsg ? t(`push.${pushMsg}`) : t("push.ios-install")}
+					</p>
+				)}
 			</div>
 			<Button
 				variant="outline"
