@@ -5,8 +5,10 @@ import {
 } from "@/server/scheduler";
 
 /**
- * Teacher evening notifications — fires hourly from 18:00 to 22:00 UTC via Vercel
- * Cron (see apps/web/vercel.json); protected by the `CRON_SECRET` bearer token,
+ * Teacher evening notifications — fires hourly from 16:00 to 18:00 UTC.
+ * The Vercel Hobby plan only allows once-per-day crons, so this is scheduled
+ * from Dokploy instead (a `dokploy-server` schedule that curls this endpoint;
+ * see infra/dokploy-schedules.md). Protected by the `CRON_SECRET` bearer token,
  * same as /api/cron/daily. Each run pushes each teacher:
  *   - one notification per student who still hasn't finished today's review
  *     (re-sent each hour while the student is behind — the hour is part of the

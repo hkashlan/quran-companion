@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/daily",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/teacher-summary",
-      "schedule": "0 18-22 * * *"
     }
   ]
 }

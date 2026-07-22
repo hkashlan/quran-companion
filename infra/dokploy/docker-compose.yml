@@ -1,0 +1,73 @@
+# Dokploy production stack: the @quran/web SSR app + its Postgres database.
+#
+# Deployed as a Dokploy "Compose" service (Git source: hkashlan/quran-companion,
+# composePath: infra/dokploy/docker-compose.yml). Dokploy substitutes the
+# ${...} values from the service Environment and attaches the web container to
+# Traefik via the domain configured in the Dokploy UI/API.
+#
+# Build-time note: VITE_BETTER_AUTH_URL is baked into the client bundle, so it
+# is passed as a build arg (not only runtime env).
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        VITE_BETTER_AUTH_URL: ${VITE_BETTER_AUTH_URL}
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Points at the db service on the internal network below.
+      DATABASE_URL: postgres://quran:${POSTGRES_PASSWORD}@db:5432/quran
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      VITE_BETTER_AUTH_URL: ${VITE_BETTER_AUTH_URL}
+      CRON_SECRET: ${CRON_SECRET}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY}
+      FIREBASE_WEB_CONFIG: ${FIREBASE_WEB_CONFIG}
+      FIREBASE_VAPID_KEY: ${FIREBASE_VAPID_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+      - internal
+    expose:
+      - "3000"
+
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: quran
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: quran
+    volumes:
+      - quran_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quran -d quran"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - internal
+
+networks:
+  # Shared network Traefik lives on; created by Dokploy, referenced as external.
+  dokploy-network:
+    external: true
+  # Private network for web <-> db traffic only.
+  internal:
+    driver: bridge
+
+volumes:
+  quran_db:
