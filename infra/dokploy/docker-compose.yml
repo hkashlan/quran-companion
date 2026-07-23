@@ -1,4 +1,10 @@
-# Dokploy production stack: the @quran/web SSR app + its Postgres database.
+# Dokploy production stack: the @quran/web SSR app.
+#
+# Postgres is NOT in this compose — it runs as a native Dokploy Database
+# ("quran-db", postgresId B9bhitW0jh52aF8fJOnOj) so it has its own backups,
+# external-access toggle, and lifecycle independent of app redeploys. The app
+# reaches it over dokploy-network by the DB's service name; DATABASE_URL is set
+# in the Dokploy Environment.
 #
 # Deployed as a Dokploy "Compose" service (Git source: hkashlan/quran-companion,
 # composePath: infra/dokploy/docker-compose.yml). Dokploy substitutes the
@@ -19,8 +25,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # Points at the db service on the internal network below.
-      DATABASE_URL: postgres://quran:${POSTGRES_PASSWORD}@db:5432/quran
+      # Set in the Dokploy Environment; points at the native quran-db database
+      # over dokploy-network (postgresql://quran:<pw>@<db-appName>:5432/quran).
+      DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       VITE_BETTER_AUTH_URL: ${VITE_BETTER_AUTH_URL}
@@ -35,39 +42,12 @@ services:
       FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY}
       FIREBASE_WEB_CONFIG: ${FIREBASE_WEB_CONFIG}
       FIREBASE_VAPID_KEY: ${FIREBASE_VAPID_KEY}
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - dokploy-network
-      - internal
     expose:
       - "3000"
 
-  db:
-    image: postgres:16-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: quran
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: quran
-    volumes:
-      - quran_db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U quran -d quran"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-    networks:
-      - internal
-
 networks:
-  # Shared network Traefik lives on; created by Dokploy, referenced as external.
+  # Shared network Traefik and the native quran-db database both live on.
   dokploy-network:
     external: true
-  # Private network for web <-> db traffic only.
-  internal:
-    driver: bridge
-
-volumes:
-  quran_db:
