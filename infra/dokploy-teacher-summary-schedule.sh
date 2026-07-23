@@ -15,7 +15,9 @@ set -euo pipefail
 
 NAME="quran teacher-summary (hourly 16-18 UTC)"
 CRON="0 16-18 * * *"
-TARGET="https://www.quran-companion.de/api/cron/teacher-summary"
+# Apex domain — this is where the Dokploy app is served. NOTE: www.quran-companion.de
+# still points at the old (dead) Vercel deployment, so it must NOT be used here.
+TARGET="https://quran-companion.de/api/cron/teacher-summary"
 
 api() {
   curl -sS -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" "$@"

@@ -31,7 +31,11 @@ toggle it in the Dokploy UI (Schedules).
 - **id**: `nup4EHp6O6oUaMCc4khLT`
 - **name**: `quran teacher-summary (hourly 16-18 UTC)`
 - **cron**: `0 16-18 * * *`
-- **command**: `curl -sS --fail --max-time 60 -H 'Authorization: Bearer $CRON_SECRET' https://www.quran-companion.de/api/cron/teacher-summary`
+- **command**: `curl -sS --fail --max-time 60 -H 'Authorization: Bearer $CRON_SECRET' https://quran-companion.de/api/cron/teacher-summary`
+
+> **Important:** target the **apex** `quran-companion.de` (Dokploy). The `www.`
+> subdomain still resolves to the retired Vercel deployment and returns 404, which
+> made every scheduled run fail silently (curl `--fail`).
 
 > Note: Dokploy runs cron in the server's timezone. This host is UTC, matching
 > the endpoint's use of `now.getUTCHours()`. If the host timezone changes, adjust
