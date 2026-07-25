@@ -9,7 +9,12 @@
 # Deployed as a Dokploy "Compose" service (Git source: hkashlan/quran-companion,
 # composePath: infra/dokploy/docker-compose.yml). Dokploy substitutes the
 # ${...} values from the service Environment and attaches the web container to
-# Traefik via the domain configured in the Dokploy UI/API.
+# Traefik via the domains configured in the Dokploy UI/API.
+#
+# Two domains point at service `web` (both with a letsencrypt cert, so each has
+# valid TLS): quran-companion.de and www.quran-companion.de. The apex is the
+# canonical host — the app itself 301/308s www → apex (apps/web/src/server.ts)
+# so sessions aren't split across two origins. BETTER_AUTH_URL must be the apex.
 #
 # Build-time note: VITE_BETTER_AUTH_URL is baked into the client bundle, so it
 # is passed as a build arg (not only runtime env).

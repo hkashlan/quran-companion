@@ -15,8 +15,9 @@ set -euo pipefail
 
 NAME="quran teacher-summary (hourly 16-18 UTC)"
 CRON="0 16-18 * * *"
-# Apex domain — this is where the Dokploy app is served. NOTE: www.quran-companion.de
-# still points at the old (dead) Vercel deployment, so it must NOT be used here.
+# Apex domain — the canonical host, and where the Dokploy app is served.
+# www.quran-companion.de redirects here (apps/web/src/server.ts), so always
+# target the apex directly rather than relying on curl to follow the redirect.
 TARGET="https://quran-companion.de/api/cron/teacher-summary"
 
 api() {
