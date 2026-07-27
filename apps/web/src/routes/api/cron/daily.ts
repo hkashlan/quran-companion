@@ -11,9 +11,11 @@ export const Route = createFileRoute("/api/cron/daily")({
 	server: {
 		handlers: {
 			GET: async ({ request }) => {
+				console.log("[cron/daily] request received");
 				const secret = process.env.CRON_SECRET;
 				const authHeader = request.headers.get("authorization");
 				if (!secret || authHeader !== `Bearer ${secret}`) {
+					console.warn("[cron/daily] rejected: bad or missing bearer token");
 					return new Response("unauthorized", { status: 401 });
 				}
 				const today = new Date().toISOString().slice(0, 10);

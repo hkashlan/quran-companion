@@ -20,9 +20,13 @@ export const Route = createFileRoute("/api/cron/teacher-summary")({
 	server: {
 		handlers: {
 			GET: async ({ request }) => {
+				console.log("[cron/teacher-summary] request received");
 				const secret = process.env.CRON_SECRET;
 				const authHeader = request.headers.get("authorization");
 				if (!secret || authHeader !== `Bearer ${secret}`) {
+					console.warn(
+						"[cron/teacher-summary] rejected: bad or missing bearer token",
+					);
 					return new Response("unauthorized", { status: 401 });
 				}
 				const now = new Date();
