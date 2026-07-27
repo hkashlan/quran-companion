@@ -18,6 +18,7 @@ export const Route = createFileRoute("/api/cron/daily")({
 				}
 				const today = new Date().toISOString().slice(0, 10);
 				const summary = await runDailyScheduler(today);
+				console.log(`[cron/daily] ${today} ${JSON.stringify(summary)}`);
 				return Response.json({
 					ok: true,
 					ranAt: new Date().toISOString(),

@@ -29,6 +29,9 @@ export const Route = createFileRoute("/api/cron/teacher-summary")({
 				const today = now.toISOString().slice(0, 10);
 				const summary = await runTeacherSummary(today, now.getUTCHours());
 				const pendingRequests = await runPendingRequestsReminder(today);
+				console.log(
+					`[cron/teacher-summary] ${today} ${JSON.stringify({ ...summary, pendingRequests })}`,
+				);
 				return Response.json({
 					ok: true,
 					ranAt: new Date().toISOString(),
