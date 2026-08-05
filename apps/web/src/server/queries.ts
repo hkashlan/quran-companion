@@ -43,6 +43,45 @@ function today(): string {
 	return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Arabic clock time ("14:30") for a notification body, in the reader's zone.
+ * Latin digits to match the page numbers already used in those bodies. Falls
+ * back to UTC when the stored timezone is missing or not a valid IANA name.
+ */
+function formatTimeAr(at: Date, timeZone: string | null | undefined): string {
+	const opts: Intl.DateTimeFormatOptions = {
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+		numberingSystem: "latn",
+	};
+	try {
+		return new Intl.DateTimeFormat("ar", {
+			...opts,
+			timeZone: timeZone ?? "UTC",
+		}).format(at);
+	} catch {
+		return new Intl.DateTimeFormat("ar", { ...opts, timeZone: "UTC" }).format(
+			at,
+		);
+	}
+}
+
+/**
+ * Arabic calendar-day label ("الأحد 5 أغسطس") for a `YYYY-MM-DD` review date.
+ * Formatted in UTC on purpose: the value is a calendar date, not an instant, so
+ * applying a zone offset would shift it onto the wrong day.
+ */
+function formatDayAr(isoDate: string): string {
+	return new Intl.DateTimeFormat("ar", {
+		timeZone: "UTC",
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		numberingSystem: "latn",
+	}).format(new Date(`${isoDate}T00:00:00Z`));
+}
+
 /** Public VAPID key for the client push-subscribe flow ("" if unconfigured). */
 export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(
 	async () => {
@@ -1248,10 +1287,23 @@ export const submitReview = createServerFn({ method: "POST" })
 				Math.max(progressPage - dayStart + 1, 0),
 				targetPages,
 			);
+			// The review's own day — not necessarily today, since a back-dated review
+			// can be reported later — plus the wall-clock time of this report, read
+			// in the teacher's zone because the teacher is who reads the message.
+			const [teacher] = await db
+				.select({ timezone: userTable.timezone })
+				.from(userTable)
+				.where(eq(userTable.id, review.teacherId))
+				.limit(1);
+			const dayLabel = formatDayAr(review.assignedDate);
+			const timeLabel = formatTimeAr(
+				new Date(),
+				teacher?.timezone ?? u.timezone ?? null,
+			);
 			const title = "تحديث تقدم الطالب";
 			const body = targetMet
-				? `${u.name} أتمّ مراجعة اليوم (ص ${progressPage})`
-				: `${u.name} وصل إلى ص ${progressPage} (${donePages}/${targetPages})`;
+				? `${u.name} أتمّ مراجعة يوم ${dayLabel} (ص ${progressPage}) — الساعة ${timeLabel}`
+				: `${u.name} وصل إلى ص ${progressPage} (${donePages}/${targetPages}) في مراجعة يوم ${dayLabel} — الساعة ${timeLabel}`;
 			const inserted = await db
 				.insert(notificationDeliveries)
 				.values({

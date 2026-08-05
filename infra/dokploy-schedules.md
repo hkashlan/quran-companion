@@ -1,44 +1,49 @@
 # Dokploy schedules
 
-The Vercel **Hobby** plan only allows cron jobs that run **once per day**. Anything
-that needs to run more often is scheduled from Dokploy instead, using a native
-`dokploy-server` schedule that simply `curl`s the corresponding API route.
+Both cron routes are triggered by native `dokploy-server` schedules that `curl`
+the corresponding API route with the `CRON_SECRET` bearer token.
 
-| Route | Cadence (UTC) | Where it runs |
+| Schedule | Cron (UTC) | Route |
 | --- | --- | --- |
-| `/api/cron/daily` | `0 0 * * *` (once/day) | Vercel Cron (`apps/web/vercel.json`) |
-| `/api/cron/teacher-summary` | `0 16-18 * * *` (hourly, 3×/day) | Dokploy schedule |
+| `quran daily scheduler (00:00 UTC)` | `0 0 * * *` | `/api/cron/daily` |
+| `quran teacher-summary (hourly 16-18 UTC)` | `0 16-18 * * *` | `/api/cron/teacher-summary` |
 
-Each route is protected by the `CRON_SECRET` bearer token, so the Dokploy
-schedule sends `Authorization: Bearer $CRON_SECRET`.
-
-## Recreate / update
-
-Requires `DOKPLOY_URL` and `DOKPLOY_API_KEY` (already in `~/.zshrc`) plus
-`CRON_SECRET` (value lives in `apps/web/.env.production.local`, matching the
-Vercel env var). Then:
+Command shape (one line; `CRON_SECRET` value from `apps/web/.env.production.local`):
 
 ```sh
-CRON_SECRET=<secret> ./infra/dokploy-teacher-summary-schedule.sh
+curl -sS --max-time 300 -w ' HTTP_STATUS:%{http_code} ' -H 'Authorization: Bearer <CRON_SECRET>' https://quran-companion.de/api/cron/daily 2>&1
 ```
 
-The script is idempotent: it deletes any existing schedule with the same name
-before creating a fresh one. To disable it, set `enabled: false` via the API or
-toggle it in the Dokploy UI (Schedules).
+- No `--fail`, and stderr folded into stdout, so the schedule run log always
+  shows the HTTP status / body / curl error instead of appearing empty.
+- Each handler also logs `[cron/…] request received` and a summary line to the
+  app console, so the container Logs tab independently confirms every run.
 
-## Current schedule
+## Maintain via the Dokploy UI ONLY
 
-- **id**: `nup4EHp6O6oUaMCc4khLT`
-- **name**: `quran teacher-summary (hourly 16-18 UTC)`
-- **cron**: `0 16-18 * * *`
-- **command**: `curl -sS --fail --max-time 60 -H 'Authorization: Bearer $CRON_SECRET' https://quran-companion.de/api/cron/teacher-summary`
+**Create and edit these schedules by pasting the command into the Dokploy UI
+(Schedules), never via the `schedule.create` API.** Schedules created through
+the API on 2026-07-27 looked correct in `schedule.list` but had no working
+command stored — every run logged only "Initializing schedule" and executed
+nothing. Re-pasting the same command through the UI fixed it instantly. Until
+that Dokploy bug is understood, treat API-created schedules as broken.
 
-> **Important:** target the **apex** `quran-companion.de` — it is the canonical
-> host. `www.` is served by the same container but 301/308s to the apex (see
-> `apps/web/src/server.ts`), so a `www.` target would only work because curl
-> follows the redirect. (It used to point at the retired Vercel deployment and
-> returned 404, which made every scheduled run fail silently under `--fail`.)
+If you rotate `CRON_SECRET` (app Environment in Dokploy), update the embedded
+token in both schedule commands by hand.
 
-> Note: Dokploy runs cron in the server's timezone. This host is UTC, matching
-> the endpoint's use of `now.getUTCHours()`. If the host timezone changes, adjust
-> the cron expression or set `timezone` on the schedule.
+## Pitfalls (learned the hard way, 2026-07-23 → 2026-07-27)
+
+- **Target the apex** `quran-companion.de`. `www.` 301s to the apex
+  (`apps/web/src/server.ts`) and curl does not follow redirects here — the old
+  teacher-summary schedule pointed at `www.` and died silently when the www
+  redirect shipped on 2026-07-23.
+- `/api/cron/daily` originally ran on **Vercel Cron** (`apps/web/vercel.json`,
+  now vestigial) and silently stopped when the app moved to Dokploy — for four
+  days reviews were only created lazily when a student opened the app.
+- Dokploy runs cron in the server's timezone (this host is UTC, matching the
+  endpoints' use of UTC dates/hours). If the host timezone changes, adjust the
+  cron expressions.
+- A quick health check: every scheduled daily run must insert `review_assigned`
+  rows in `notification_deliveries` at ~00:00 UTC; the 16-18 UTC teacher runs
+  insert `student_not_finished` rows. Silence in that table means the trigger
+  is broken again.
