@@ -1,6 +1,8 @@
 import { and, eq, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../db.ts";
+import { user } from "../tables/auth.drizzle.ts";
 import { circleMemberships } from "../tables/circle-membership.drizzle.ts";
 import {
 	learningCircleSlots,
@@ -161,6 +163,36 @@ export async function leaveCircle(
 		)
 		.returning({ id: circleMemberships.id });
 	return deleted.length > 0;
+}
+
+export type CircleMate = {
+	id: string;
+	language: string;
+	timezone: string | null;
+};
+
+/**
+ * Distinct *student* members across every circle the user belongs to (the user
+ * excluded), with the language/timezone their notifications are composed in.
+ */
+export async function listCircleMates(userId: string): Promise<CircleMate[]> {
+	const mates = alias(circleMemberships, "mates");
+	return db
+		.selectDistinct({
+			id: user.id,
+			language: user.language,
+			timezone: user.timezone,
+		})
+		.from(circleMemberships)
+		.innerJoin(mates, eq(mates.circleId, circleMemberships.circleId))
+		.innerJoin(user, eq(user.id, mates.userId))
+		.where(
+			and(
+				eq(circleMemberships.userId, userId),
+				ne(mates.userId, userId),
+				eq(mates.role, "student"),
+			),
+		);
 }
 
 export async function getCircleSlots(circleId: string) {

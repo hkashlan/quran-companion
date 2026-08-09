@@ -6,6 +6,8 @@ import {
 	useState,
 } from "react";
 
+import { setLanguage } from "@/server/queries";
+
 /**
  * Lightweight typed i18n (AR/EN/DE) with RTL handling. Interim layer that keeps
  * the screen port moving — message keys mirror the mobile app and are portable
@@ -753,6 +755,14 @@ function storeLocale(locale: Locale) {
 	}
 }
 
+function deviceTimezone(): string | undefined {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function applyDocumentLocale(locale: Locale) {
 	if (typeof document === "undefined") return;
 	document.documentElement.lang = locale;
@@ -784,6 +794,11 @@ export function I18nProvider({
 		const stored = readStoredLocale();
 		if (stored && stored !== locale) setLocaleState(stored);
 		applyDocumentLocale(stored ?? locale);
+		// Best-effort sync of language + device timezone so server-composed
+		// pushes are translated and time-gated per user (anonymous → no-op).
+		void setLanguage({
+			data: { language: stored ?? locale, timezone: deviceTimezone() },
+		}).catch(() => {});
 		// Run once on mount.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
@@ -792,6 +807,11 @@ export function I18nProvider({
 		setLocaleState(l);
 		storeLocale(l);
 		applyDocumentLocale(l);
+		// Best-effort: persist server-side so push notifications arrive in this
+		// language too (no-ops for anonymous visitors, never blocks the UI).
+		void setLanguage({
+			data: { language: l, timezone: deviceTimezone() },
+		}).catch(() => {});
 	};
 
 	const t = (key: string, vars?: Record<string, string | number>) => {

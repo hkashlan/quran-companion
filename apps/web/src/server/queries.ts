@@ -4,6 +4,7 @@ import {
 	createCircle,
 	findCircleByCode,
 	leaveCircle,
+	listCircleMates,
 	listCirclesForUser,
 } from "@quran/db/repositories/circle";
 import {
@@ -22,9 +23,10 @@ import { joinRequests } from "@quran/db/tables/join-request.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { circleMateDoneMessage } from "./notification-i18n.ts";
 import { sendPush } from "./push.ts";
 
 async function requireUser() {
@@ -80,6 +82,27 @@ function formatDayAr(isoDate: string): string {
 		month: "long",
 		numberingSystem: "latn",
 	}).format(new Date(`${isoDate}T00:00:00Z`));
+}
+
+/** Circle "did you do it yet?" nudges are held back before this local hour. */
+const CIRCLE_NUDGE_HOUR = 14;
+
+/**
+ * Wall-clock hour (0-23) right now in the given IANA zone; UTC when the zone
+ * is missing or invalid.
+ */
+function hourIn(timeZone: string | null | undefined): number {
+	try {
+		return Number(
+			new Intl.DateTimeFormat("en-GB", {
+				hour: "2-digit",
+				hour12: false,
+				timeZone: timeZone ?? "UTC",
+			}).format(new Date()),
+		);
+	} catch {
+		return new Date().getUTCHours();
+	}
 }
 
 /** Public VAPID key for the client push-subscribe flow ("" if unconfigured). */
@@ -1325,7 +1348,102 @@ export const submitReview = createServerFn({ method: "POST" })
 				});
 			}
 		}
+
+		// Motivate circle mates who are behind: the first time today's target is
+		// met, count how many circle students already finished today's review and
+		// nudge the student mates whose review is still open — anonymously (no
+		// names), each in their own language, only after 14:00 in the recipient's
+		// timezone, and at most once per student per day (deduped on date +
+		// recipient). Back-dated completions don't announce.
+		if (targetMet && !alreadyScored && review.assignedDate === todayStr) {
+			const mates = await listCircleMates(u.id);
+			if (mates.length > 0) {
+				const todayRows = await db
+					.select({
+						studentId: reviews.studentId,
+						completedAt: reviews.completedAt,
+					})
+					.from(reviews)
+					.where(
+						and(
+							inArray(
+								reviews.studentId,
+								mates.map((m) => m.id),
+							),
+							eq(reviews.assignedDate, todayStr),
+						),
+					);
+				const finished = new Set<string>();
+				const pending = new Set<string>();
+				for (const r of todayRows) {
+					if (r.completedAt) finished.add(r.studentId);
+					else pending.add(r.studentId);
+				}
+				// A mate with several reviews today is behind while any is open.
+				for (const id of pending) finished.delete(id);
+				const finishedCount = finished.size + 1; // + the student who just did
+				const recipients = mates.filter(
+					(m) => pending.has(m.id) && hourIn(m.timezone) >= CIRCLE_NUDGE_HOUR,
+				);
+				if (recipients.length > 0) {
+					const { notificationDeliveries } = await import(
+						"@quran/db/tables/notification-delivery.drizzle"
+					);
+					for (const mate of recipients) {
+						const msg = circleMateDoneMessage(mate.language, finishedCount);
+						const inserted = await db
+							.insert(notificationDeliveries)
+							.values({
+								userId: mate.id,
+								eventType: "circle_mate_done",
+								title: msg.title,
+								body: msg.body,
+								status: "sent",
+								dedupeKey: `circle_mate_done:${todayStr}:${mate.id}`,
+								sentAt: new Date(),
+							})
+							.onConflictDoNothing({
+								target: notificationDeliveries.dedupeKey,
+							})
+							.returning({ id: notificationDeliveries.id });
+						if (inserted.length > 0) {
+							await sendPush(mate.id, {
+								title: msg.title,
+								body: msg.body,
+								data: { url: "/", lang: msg.locale, dir: msg.dir },
+							});
+						}
+					}
+				}
+			}
+		}
 		return { ok: true as const, earned, progressPage, targetMet };
+	});
+
+/**
+ * Persist the caller's UI language (+ device timezone) so server-composed
+ * pushes are translated and time-gated correctly per recipient.
+ */
+export const setLanguage = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			language: z.enum(["ar", "en", "de"]),
+			timezone: z.string().min(1).max(64).optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const session = await auth.api.getSession({ headers: getRequestHeaders() });
+		// Best-effort call from the client — anonymous visitors no-op.
+		if (!session) return { ok: false as const };
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		await db
+			.update(userTable)
+			.set({
+				language: data.language,
+				...(data.timezone ? { timezone: data.timezone } : {}),
+			})
+			.where(eq(userTable.id, session.user.id));
+		return { ok: true as const };
 	});
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "invalid_time");

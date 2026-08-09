@@ -35,8 +35,9 @@ messaging.onBackgroundMessage((payload) => {
 		body: d.body || "",
 		icon: "/icons/icon-192.png",
 		badge: "/icons/icon-192.png",
-		dir: "rtl",
-		lang: "ar",
+		// Per-recipient language sent by the server; Arabic/RTL as before.
+		dir: d.dir || "rtl",
+		lang: d.lang || "ar",
 		data: { url: d.url || "/" },
 	});
 });

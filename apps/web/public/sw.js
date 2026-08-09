@@ -16,14 +16,16 @@ self.addEventListener("push", (event) => {
 		data = { title: "Quran Companion", body: event.data ? event.data.text() : "" };
 	}
 	const title = data.title || "Quran Companion";
+	const meta = data.data || {};
 	event.waitUntil(
 		self.registration.showNotification(title, {
 			body: data.body || "",
 			icon: "/icons/icon-192.png",
 			badge: "/icons/icon-192.png",
-			dir: "rtl",
-			lang: "ar",
-			data: data.data || {},
+			// Per-recipient language sent by the server; Arabic/RTL as before.
+			dir: meta.dir || "rtl",
+			lang: meta.lang || "ar",
+			data: meta,
 		}),
 	);
 });
