@@ -28,15 +28,19 @@ function TeacherShell() {
 		{
 			to: "/teacher",
 			icon: <Users size={22} />,
-			label: t("nav.students"),
+			label: t("nav.myStudents"),
 			badge: pending,
 		},
 		// The teacher's own learning (same screens as a student's Home/Progress).
-		{ to: "/teacher/home", icon: <Home size={22} />, label: t("nav.home") },
+		{
+			to: "/teacher/home",
+			icon: <Home size={22} />,
+			label: t("nav.asStudent"),
+		},
 		{
 			to: "/teacher/progress",
 			icon: <BarChart3 size={22} />,
-			label: t("nav.progress"),
+			label: t("nav.myProgress"),
 		},
 		{
 			to: "/teacher/leaderboard",

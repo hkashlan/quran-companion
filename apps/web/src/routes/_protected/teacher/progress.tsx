@@ -14,7 +14,7 @@ function TeacherStudentProgress() {
 	const data = Route.useLoaderData();
 	return (
 		<div className="flex flex-col gap-4 p-4">
-			<h1 className="text-[22px] font-bold text-text">{t("nav.progress")}</h1>
+			<h1 className="text-[22px] font-bold text-text">{t("nav.myProgress")}</h1>
 			<ReviewProgress
 				reviews={data.reviews}
 				sessions={data.sessions}
