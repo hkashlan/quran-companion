@@ -29,7 +29,9 @@ export function BottomTabBar({ tabs }: { tabs: Tab[] }) {
 							</span>
 						) : null}
 					</span>
-					<span className="text-[10px]">{tab.label}</span>
+					<span className="max-w-full truncate px-0.5 text-[10px]">
+						{tab.label}
+					</span>
 				</Link>
 			))}
 		</nav>

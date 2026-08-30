@@ -29,6 +29,15 @@ function SubmitReview() {
 	const router = useRouter();
 	const { reviewId } = Route.useSearch();
 	const { review } = Route.useLoaderData();
+	// Back to the learner's home: the student tabs, or — for a teacher doing
+	// their own review in another teacher's circle — the teacher tabs.
+	const role = (
+		Route.useRouteContext() as { session?: { user?: { role?: string } } }
+	).session?.user?.role;
+	function goHome() {
+		if (role === "teacher") navigate({ to: "/teacher/home" });
+		else navigate({ to: "/student" });
+	}
 
 	const dayStart = review?.startPage ?? 1;
 	const dayEnd = review?.endPage ?? dayStart;
@@ -56,7 +65,7 @@ function SubmitReview() {
 		if (!res.ok) return;
 		if (res.targetMet) {
 			setDone(true);
-			setTimeout(() => navigate({ to: "/student" }), 900);
+			setTimeout(goHome, 900);
 		} else {
 			// Partial save: stay so the student can keep going; refresh progress.
 			setSavedMsg(true);
@@ -67,11 +76,7 @@ function SubmitReview() {
 	return (
 		<div className="mx-auto flex min-h-screen max-w-md flex-col gap-3 bg-background p-4">
 			<header className="flex items-center gap-2 pb-2">
-				<button
-					type="button"
-					onClick={() => navigate({ to: "/student" })}
-					className="text-text-secondary"
-				>
+				<button type="button" onClick={goHome} className="text-text-secondary">
 					<ChevronRight size={24} />
 				</button>
 				<h1 className="text-[20px] font-bold text-text">{t("submit.title")}</h1>

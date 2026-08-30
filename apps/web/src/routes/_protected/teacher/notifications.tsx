@@ -17,7 +17,7 @@ function TeacherNotifications() {
 			<h1 className="text-[22px] font-bold text-text">
 				{t("notifications.title")}
 			</h1>
-			<NotificationList items={items} />
+			<NotificationList items={items} viewer="teacher" />
 		</div>
 	);
 }

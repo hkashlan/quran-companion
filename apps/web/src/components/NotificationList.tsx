@@ -19,13 +19,21 @@ type NotificationItem = {
 	eventType: string;
 };
 
-/** Where each notification type takes the user when tapped (null = not actionable). */
+type Viewer = "teacher" | "student";
+
+/**
+ * Where each notification type takes the user when tapped (null = not
+ * actionable). Learner destinations depend on who is reading: a teacher who is
+ * also a student in another teacher's circle stays under the teacher tabs.
+ */
 function destFor(
 	eventType: string,
+	viewer: Viewer,
 ):
 	| "/student"
 	| "/student/plan"
-	| "/teacher/requests"
+	| "/teacher/home"
+	| "/teacher/plan"
 	| "/teacher"
 	| "/teacher/late-students"
 	| null {
@@ -33,14 +41,14 @@ function destFor(
 		case "review_assigned":
 		case "review_reminder":
 		case "teacher_message":
-			return "/student";
+			return viewer === "teacher" ? "/teacher/home" : "/student";
 		case "plan_change_approved":
 		case "plan_change_rejected":
-			return "/student/plan";
+			return viewer === "teacher" ? "/teacher/plan" : "/student/plan";
 		case "plan_change_requested":
 		case "join_requested":
-			// Teacher: the screen where a pending request can be approved/rejected.
-			return "/teacher/requests";
+			// Teacher: requests are approved/rejected on the Students screen.
+			return "/teacher";
 		case "plan_changed":
 			return "/teacher";
 		case "student_not_finished":
@@ -52,7 +60,14 @@ function destFor(
 }
 
 /** Notification list: unread/all filter, bulk actions, tap-to-act, per-row delete. */
-export function NotificationList({ items }: { items: NotificationItem[] }) {
+export function NotificationList({
+	items,
+	viewer = "student",
+}: {
+	items: NotificationItem[];
+	/** Which shell the list is shown in — decides where learner notifications lead. */
+	viewer?: Viewer;
+}) {
 	const { t } = useI18n();
 	const router = useRouter();
 	// Default to showing only unread notifications.
@@ -63,7 +78,7 @@ export function NotificationList({ items }: { items: NotificationItem[] }) {
 	async function open(n: NotificationItem) {
 		if (!n.isRead) await markNotificationRead({ data: { id: n.id } });
 		router.invalidate(); // refresh the list + unread badge
-		const dest = destFor(n.eventType);
+		const dest = destFor(n.eventType, viewer);
 		if (dest) router.navigate({ to: dest });
 	}
 

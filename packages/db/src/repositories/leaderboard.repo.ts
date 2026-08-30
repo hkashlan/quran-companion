@@ -1,7 +1,8 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "../db.ts";
 import { user } from "../tables/auth.drizzle.ts";
+import { circleMemberships } from "../tables/circle-membership.drizzle.ts";
 import { reviews } from "../tables/review.drizzle.ts";
 
 export type LeaderboardPeriod = "overall" | "weekly" | "monthly";
@@ -20,9 +21,26 @@ function windowStart(today: string, days: number): string {
 }
 
 /**
+ * Who gets ranked: every student account, plus any teacher who joined a circle
+ * as a student — they follow a plan and earn points like everyone else.
+ */
+function isLearner() {
+	return or(
+		eq(user.role, "student"),
+		inArray(
+			user.id,
+			db
+				.select({ id: circleMemberships.userId })
+				.from(circleMemberships)
+				.where(eq(circleMemberships.role, "student")),
+		),
+	);
+}
+
+/**
  * Leaderboard ranking (port of services/leaderboard.py):
- *  - overall: students by total user.points
- *  - weekly/monthly: students by points_earned on reviews completed in the
+ *  - overall: learners by total user.points
+ *  - weekly/monthly: learners by points_earned on reviews completed in the
  *    last 7 / 30 days. Streak is always the user's current streak.
  */
 export async function getLeaderboard(
@@ -38,7 +56,7 @@ export async function getLeaderboard(
 				streak: user.streak,
 			})
 			.from(user)
-			.where(eq(user.role, "student"))
+			.where(isLearner())
 			.orderBy(desc(user.points), user.name);
 		return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 	}
@@ -61,7 +79,7 @@ export async function getLeaderboard(
 				gte(reviews.assignedDate, from),
 			),
 		)
-		.where(eq(user.role, "student"))
+		.where(isLearner())
 		.groupBy(user.id, user.name, user.streak)
 		.orderBy(desc(periodPoints), user.name);
 
