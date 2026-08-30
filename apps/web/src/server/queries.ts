@@ -105,6 +105,68 @@ function hourIn(timeZone: string | null | undefined): number {
 	}
 }
 
+/**
+ * Every circle the teacher *teaches*, with its student members. Shared by the
+ * teacher screens. Circles the teacher joined as a student are left out — those
+ * belong to their student view, and their classmates are not their students.
+ */
+async function circlesWithStudents(userId: string) {
+	const circles = (await listCirclesForUser(userId)).filter(
+		(c) => c.memberRole !== "student",
+	);
+	const { circleMemberships } = await import(
+		"@quran/db/tables/circle-membership.drizzle"
+	);
+	const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+	return Promise.all(
+		circles.map(async (c) => {
+			const students = await db
+				.select({ id: userTable.id, name: userTable.name })
+				.from(circleMemberships)
+				.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+				.where(
+					and(
+						eq(circleMemberships.circleId, c.id),
+						eq(circleMemberships.role, "student"),
+					),
+				);
+			return { ...c, students };
+		}),
+	);
+}
+
+/**
+ * Newest review assigned today per student (first row wins). Looked up by
+ * student (circle membership) rather than by `reviews.teacherId`, so every
+ * teacher of the circle sees the student's progress whoever assigned the plan.
+ */
+async function todayReviewByStudent(studentIds: string[], todayStr: string) {
+	const rows =
+		studentIds.length === 0
+			? []
+			: await db
+					.select({
+						studentId: reviews.studentId,
+						startPage: reviews.startPage,
+						endPage: reviews.endPage,
+						progressPage: reviews.progressPage,
+						status: reviews.status,
+					})
+					.from(reviews)
+					.where(
+						and(
+							inArray(reviews.studentId, studentIds),
+							eq(reviews.assignedDate, todayStr),
+						),
+					)
+					.orderBy(desc(reviews.createdAt));
+	const byStudent = new Map<string, (typeof rows)[number]>();
+	for (const r of rows) {
+		if (!byStudent.has(r.studentId)) byStudent.set(r.studentId, r);
+	}
+	return byStudent;
+}
+
 /** Public VAPID key for the client push-subscribe flow ("" if unconfigured). */
 export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(
 	async () => {
@@ -150,7 +212,11 @@ export const getMe = createServerFn({ method: "GET" }).handler(async () => {
 export const getStudentHome = createServerFn({ method: "GET" }).handler(
 	async () => {
 		const u = await requireUser();
-		const circles = await listCirclesForUser(u.id);
+		// Only circles I'm a *student* in — a teacher opening this view to follow
+		// their own learning shouldn't see the circles they teach here.
+		const circles = (await listCirclesForUser(u.id)).filter(
+			(c) => c.memberRole === "student",
+		);
 
 		const { learningCircles } = await import(
 			"@quran/db/tables/learning-circle.drizzle"
@@ -250,7 +316,13 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 		if (!activeReview) activeReview = pending[0] ?? null;
 
 		return {
-			user: { id: u.id, name: u.name, points: u.points, streak: u.streak },
+			user: {
+				id: u.id,
+				name: u.name,
+				role: u.role,
+				points: u.points,
+				streak: u.streak,
+			},
 			circles,
 			pendingRequests,
 			hasPendingPlanChange: pendingPlanChange.length > 0,
@@ -327,31 +399,15 @@ export const deleteAllNotifications = createServerFn({
 	return { deleted };
 });
 
-/** Teacher: circles I own/teach, each with its student members. */
+/**
+ * Teacher home: the circles I teach, each with its students. (The teacher's own
+ * learning — circles joined as a student — comes from getStudentHome.)
+ */
 export const getTeacherHome = createServerFn({ method: "GET" }).handler(
 	async () => {
 		const u = await requireUser();
-		const circles = await listCirclesForUser(u.id);
-		const { circleMemberships } = await import(
-			"@quran/db/tables/circle-membership.drizzle"
-		);
-		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-		const withStudents = await Promise.all(
-			circles.map(async (c) => {
-				const students = await db
-					.select({ id: userTable.id, name: userTable.name })
-					.from(circleMemberships)
-					.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
-					.where(
-						and(
-							eq(circleMemberships.circleId, c.id),
-							eq(circleMemberships.role, "student"),
-						),
-					);
-				return { ...c, students };
-			}),
-		);
-		return { user: { id: u.id, name: u.name }, circles: withStudents };
+		const circles = await circlesWithStudents(u.id);
+		return { user: { id: u.id, name: u.name }, circles };
 	},
 );
 
@@ -363,47 +419,16 @@ export const getTeacherHome = createServerFn({ method: "GET" }).handler(
 export const getTeacherToday = createServerFn({ method: "GET" }).handler(
 	async () => {
 		const u = await requireUser();
-		const circles = await listCirclesForUser(u.id);
-		const { circleMemberships } = await import(
-			"@quran/db/tables/circle-membership.drizzle"
+		const circles = await circlesWithStudents(u.id);
+		const reviewByStudent = await todayReviewByStudent(
+			circles.flatMap((c) => c.students.map((s) => s.id)),
+			today(),
 		);
-		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-
-		// One pass over today's reviews for all my students, newest-first so the
-		// first row we see per student is the current one.
-		const todayStr = today();
-		const todayReviews = await db
-			.select({
-				studentId: reviews.studentId,
-				startPage: reviews.startPage,
-				endPage: reviews.endPage,
-				progressPage: reviews.progressPage,
-				status: reviews.status,
-			})
-			.from(reviews)
-			.where(
-				and(eq(reviews.teacherId, u.id), eq(reviews.assignedDate, todayStr)),
-			)
-			.orderBy(desc(reviews.createdAt));
-		const reviewByStudent = new Map<string, (typeof todayReviews)[number]>();
-		for (const r of todayReviews) {
-			if (!reviewByStudent.has(r.studentId))
-				reviewByStudent.set(r.studentId, r);
-		}
-
-		const withStudents = await Promise.all(
-			circles.map(async (c) => {
-				const members = await db
-					.select({ id: userTable.id, name: userTable.name })
-					.from(circleMemberships)
-					.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
-					.where(
-						and(
-							eq(circleMemberships.circleId, c.id),
-							eq(circleMemberships.role, "student"),
-						),
-					);
-				const students = members.map((s) => {
+		return {
+			circles: circles.map((c) => ({
+				id: c.id,
+				title: c.title,
+				students: c.students.map((s) => {
 					const r = reviewByStudent.get(s.id);
 					if (!r || r.startPage == null || r.endPage == null) {
 						return { id: s.id, name: s.name, today: null };
@@ -421,11 +446,9 @@ export const getTeacherToday = createServerFn({ method: "GET" }).handler(
 						name: s.name,
 						today: { target, done, over, status: r.status },
 					};
-				});
-				return { id: c.id, title: c.title, students };
-			}),
-		);
-		return { circles: withStudents };
+				}),
+			})),
+		};
 	},
 );
 
@@ -456,32 +479,11 @@ export const nudgeStudent = createServerFn({ method: "POST" })
 export const getLateStudents = createServerFn({ method: "GET" }).handler(
 	async () => {
 		const u = await requireUser();
-		const circles = await listCirclesForUser(u.id);
-		const { circleMemberships } = await import(
-			"@quran/db/tables/circle-membership.drizzle"
+		const circles = await circlesWithStudents(u.id);
+		const reviewByStudent = await todayReviewByStudent(
+			circles.flatMap((c) => c.students.map((s) => s.id)),
+			today(),
 		);
-		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
-
-		// Newest review per student today (first row wins, mirroring getTeacherToday).
-		const todayStr = today();
-		const todayReviews = await db
-			.select({
-				studentId: reviews.studentId,
-				startPage: reviews.startPage,
-				endPage: reviews.endPage,
-				progressPage: reviews.progressPage,
-				status: reviews.status,
-			})
-			.from(reviews)
-			.where(
-				and(eq(reviews.teacherId, u.id), eq(reviews.assignedDate, todayStr)),
-			)
-			.orderBy(desc(reviews.createdAt));
-		const reviewByStudent = new Map<string, (typeof todayReviews)[number]>();
-		for (const r of todayReviews) {
-			if (!reviewByStudent.has(r.studentId))
-				reviewByStudent.set(r.studentId, r);
-		}
 
 		const seen = new Set<string>();
 		const students: {
@@ -491,17 +493,7 @@ export const getLateStudents = createServerFn({ method: "GET" }).handler(
 			target: number;
 		}[] = [];
 		for (const c of circles) {
-			const members = await db
-				.select({ id: userTable.id, name: userTable.name })
-				.from(circleMemberships)
-				.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
-				.where(
-					and(
-						eq(circleMemberships.circleId, c.id),
-						eq(circleMemberships.role, "student"),
-					),
-				);
-			for (const s of members) {
+			for (const s of c.students) {
 				if (seen.has(s.id)) continue;
 				const r = reviewByStudent.get(s.id);
 				// No plan/review today → nothing due, so not "late".
@@ -539,24 +531,9 @@ export const messageLateStudents = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const u = await requireUser();
-		const circles = await listCirclesForUser(u.id);
-		const { circleMemberships } = await import(
-			"@quran/db/tables/circle-membership.drizzle"
-		);
 		// Only message students who are genuinely in one of my circles.
-		const mine = new Set<string>();
-		for (const c of circles) {
-			const members = await db
-				.select({ id: circleMemberships.userId })
-				.from(circleMemberships)
-				.where(
-					and(
-						eq(circleMemberships.circleId, c.id),
-						eq(circleMemberships.role, "student"),
-					),
-				);
-			for (const m of members) mine.add(m.id);
-		}
+		const circles = await circlesWithStudents(u.id);
+		const mine = new Set(circles.flatMap((c) => c.students.map((s) => s.id)));
 		const targets = data.studentIds.filter((id) => mine.has(id));
 		const title = `رسالة من ${u.name}`;
 		const stamp = Date.now();
@@ -604,6 +581,44 @@ export const getJoinRequests = createServerFn({ method: "GET" }).handler(
 	},
 );
 
+/**
+ * Teacher: how many requests await my decision — join requests to circles I
+ * own plus plan changes my students proposed. Badge on the Students tab.
+ */
+export const getPendingRequestsCount = createServerFn({
+	method: "GET",
+}).handler(async () => {
+	const u = await requireUser();
+	const { learningCircles } = await import(
+		"@quran/db/tables/learning-circle.drizzle"
+	);
+	const { planChangeRequests } = await import(
+		"@quran/db/tables/plan-change-request.drizzle"
+	);
+	const [[{ joins }], [{ plans }]] = await Promise.all([
+		db
+			.select({ joins: count() })
+			.from(joinRequests)
+			.innerJoin(learningCircles, eq(joinRequests.circleId, learningCircles.id))
+			.where(
+				and(
+					eq(learningCircles.ownerTeacherId, u.id),
+					eq(joinRequests.status, "pending"),
+				),
+			),
+		db
+			.select({ plans: count() })
+			.from(planChangeRequests)
+			.where(
+				and(
+					eq(planChangeRequests.teacherId, u.id),
+					eq(planChangeRequests.status, "pending"),
+				),
+			),
+	]);
+	return { pending: Number(joins) + Number(plans) };
+});
+
 export const respondJoinRequest = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
@@ -612,28 +627,62 @@ export const respondJoinRequest = createServerFn({ method: "POST" })
 		}),
 	)
 	.handler(async ({ data }) => {
-		await requireUser();
+		const u = await requireUser();
 		const { circleMemberships } = await import(
 			"@quran/db/tables/circle-membership.drizzle"
 		);
+		const { learningCircles } = await import(
+			"@quran/db/tables/learning-circle.drizzle"
+		);
+		// Only the circle's owner may let someone in.
 		const [req] = await db
+			.select({
+				userId: joinRequests.userId,
+				circleId: joinRequests.circleId,
+				requestedRole: joinRequests.requestedRole,
+				status: joinRequests.status,
+				ownerTeacherId: learningCircles.ownerTeacherId,
+			})
+			.from(joinRequests)
+			.innerJoin(learningCircles, eq(joinRequests.circleId, learningCircles.id))
+			.where(eq(joinRequests.id, data.id))
+			.limit(1);
+		if (!req || req.ownerTeacherId !== u.id) {
+			return {
+				ok: false as const,
+				error: "forbidden" as const,
+				userId: null,
+				requestedRole: null,
+			};
+		}
+		if (req.status !== "pending") {
+			return {
+				ok: false as const,
+				error: "not_pending" as const,
+				userId: null,
+				requestedRole: null,
+			};
+		}
+		await db
 			.update(joinRequests)
 			.set({ status: data.status })
-			.where(eq(joinRequests.id, data.id))
-			.returning();
-		if (req && data.status === "approved") {
-			await db.insert(circleMemberships).values({
-				circleId: req.circleId,
-				userId: req.userId,
-				role: req.requestedRole === "teacher" ? "teacher" : "student",
-			});
+			.where(eq(joinRequests.id, data.id));
+		if (data.status === "approved") {
+			await db
+				.insert(circleMemberships)
+				.values({
+					circleId: req.circleId,
+					userId: req.userId,
+					role: req.requestedRole === "teacher" ? "teacher" : "student",
+				})
+				.onConflictDoNothing();
 		}
 		// Return the joiner so the teacher UI can send them straight to the
 		// assign-plan screen after approving a student.
 		return {
-			ok: true,
-			userId: req?.userId ?? null,
-			requestedRole: req?.requestedRole ?? null,
+			ok: true as const,
+			userId: req.userId,
+			requestedRole: req.requestedRole,
 		};
 	});
 
@@ -1548,12 +1597,14 @@ export const joinCircleByCode = createServerFn({ method: "POST" })
 			};
 		}
 
+		// Everyone joins as a student — including teachers, who can follow their
+		// own memorisation in another teacher's circle from the student view.
 		const [request] = await db
 			.insert(joinRequests)
 			.values({
 				userId: u.id,
 				circleId: circle.id,
-				requestedRole: u.role === "teacher" ? "teacher" : "student",
+				requestedRole: "student",
 				status: "pending",
 			})
 			.returning({ id: joinRequests.id });
@@ -1566,7 +1617,7 @@ export const joinCircleByCode = createServerFn({ method: "POST" })
 			"طلب انضمام جديد",
 			`${u.name} يطلب الانضمام إلى ${circle.title}`,
 			`join_requested:${request.id}`,
-			"/teacher/requests",
+			"/teacher",
 		);
 
 		return { ok: true as const, circleTitle: circle.title };

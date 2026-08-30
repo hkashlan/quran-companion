@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PlanEditor } from "@/components/PlanEditor";
 import { getStudentPlan } from "@/server/queries";
 
-export const Route = createFileRoute("/_protected/student/plan")({
+/** A teacher's own review plan (as a student in another teacher's circle). */
+export const Route = createFileRoute("/_protected/teacher/plan")({
 	loader: async () => getStudentPlan(),
 	component: PlanScreen,
 });

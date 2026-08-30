@@ -1,8 +1,8 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { Bell, Mail, Settings, Trophy, Users } from "lucide-react";
+import { BarChart3, Bell, Home, Settings, Trophy, Users } from "lucide-react";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { useI18n } from "@/lib/i18n";
-import { getNotifications } from "@/server/queries";
+import { getNotifications, getPendingRequestsCount } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/teacher")({
 	beforeLoad: ({ context }) => {
@@ -11,21 +11,32 @@ export const Route = createFileRoute("/_protected/teacher")({
 		if (role && role !== "teacher") throw redirect({ to: "/student" });
 	},
 	loader: async () => {
-		const { unread } = await getNotifications();
-		return { unread };
+		const [{ unread }, { pending }] = await Promise.all([
+			getNotifications(),
+			getPendingRequestsCount(),
+		]);
+		return { unread, pending };
 	},
 	component: TeacherShell,
 });
 
 function TeacherShell() {
 	const { t } = useI18n();
-	const { unread } = Route.useLoaderData();
+	const { unread, pending } = Route.useLoaderData();
 	const tabs = [
-		{ to: "/teacher", icon: <Users size={22} />, label: t("nav.students") },
+		// Students + the requests waiting on the teacher (badge = pending count).
 		{
-			to: "/teacher/requests",
-			icon: <Mail size={22} />,
-			label: t("nav.requests"),
+			to: "/teacher",
+			icon: <Users size={22} />,
+			label: t("nav.students"),
+			badge: pending,
+		},
+		// The teacher's own learning (same screens as a student's Home/Progress).
+		{ to: "/teacher/home", icon: <Home size={22} />, label: t("nav.home") },
+		{
+			to: "/teacher/progress",
+			icon: <BarChart3 size={22} />,
+			label: t("nav.progress"),
 		},
 		{
 			to: "/teacher/leaderboard",

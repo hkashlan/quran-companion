@@ -1,12 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarPlus, ClipboardList, Plus, Share2, Users } from "lucide-react";
 import { useState } from "react";
+import { PendingRequests } from "@/components/PendingRequests";
 import { Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
-import { getTeacherHome } from "@/server/queries";
+import {
+	getJoinRequests,
+	getPlanChangeRequests,
+	getTeacherHome,
+} from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/teacher/")({
-	loader: async () => getTeacherHome(),
+	loader: async () => {
+		const [home, join, planChanges] = await Promise.all([
+			getTeacherHome(),
+			getJoinRequests(),
+			getPlanChangeRequests(),
+		]);
+		return {
+			...home,
+			requests: join.requests,
+			planChanges: planChanges.requests,
+		};
+	},
 	component: TeacherHome,
 });
 
@@ -49,7 +65,8 @@ function ShareButton({ code }: { code: string }) {
 			onClick={share}
 			className="flex items-center gap-1 rounded-md bg-primary-light px-2 py-1 text-[11px] font-semibold text-primary"
 		>
-			<Share2 size={13} /> {copied ? t("teacher.linkCopied") : t("teacher.share")}
+			<Share2 size={13} />{" "}
+			{copied ? t("teacher.linkCopied") : t("teacher.share")}
 		</button>
 	);
 }
@@ -67,6 +84,11 @@ function TeacherHome() {
 					{data.user.name.slice(0, 1)}
 				</div>
 			</header>
+
+			<PendingRequests
+				requests={data.requests}
+				planChanges={data.planChanges}
+			/>
 
 			<Link
 				to="/create-circle"

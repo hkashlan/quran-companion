@@ -1,16 +1,15 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { BarChart3, Bell, Home, Settings, Trophy } from "lucide-react";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { useI18n } from "@/lib/i18n";
 import { getNotifications } from "@/server/queries";
 
-/** Student tab shell. Guards role and provides the bottom tab navigation. */
+/**
+ * Student tab shell with the bottom tab navigation. No role guard: students
+ * live here, and a teacher can open it to follow their own learning in a
+ * circle they joined as a student (the teacher shell stays teacher-only).
+ */
 export const Route = createFileRoute("/_protected/student")({
-	beforeLoad: ({ context }) => {
-		const role = (context as { session?: { user?: { role?: string } } }).session
-			?.user?.role;
-		if (role && role !== "student") throw redirect({ to: "/teacher" });
-	},
 	loader: async () => {
 		const { unread } = await getNotifications();
 		return { unread };

@@ -377,7 +377,7 @@ export async function runPendingRequestsReminder(today: string) {
 			await sendPush(teacherId, {
 				title,
 				body,
-				data: { url: "/teacher/requests" },
+				data: { url: "/teacher" },
 			});
 			notified += 1;
 		}
