@@ -26,9 +26,6 @@ export function NotificationPrompt() {
 	const { t } = useI18n();
 	const [show, setShow] = useState(false);
 	const [native, setNative] = useState(false);
-	const [busy, setBusy] = useState(false);
-	// "denied" once the user turns us down at the OS/browser level.
-	const [result, setResult] = useState<"denied" | null>(null);
 
 	// The install banner is also pinned to the bottom — stack above it.
 	const deferred = useSyncExternalStore(
@@ -65,21 +62,11 @@ export function NotificationPrompt() {
 		setShow(false);
 	};
 
-	const enable = async () => {
-		setBusy(true);
-		try {
-			const ok = native
-				? (await registerNativePush()) === "registered"
-				: (await enableFirebasePush()) === "subscribed";
-			if (ok) {
-				sessionStorage.setItem(DISMISS_KEY, "1");
-				setShow(false);
-			} else {
-				setResult("denied");
-			}
-		} finally {
-			setBusy(false);
-		}
+	// Hide as soon as the user taps Enable — the OS/browser dialog takes over
+	// from here, and whatever they answer there we don't ask again this session.
+	const enable = () => {
+		dismiss();
+		void (native ? registerNativePush() : enableFirebasePush());
 	};
 
 	return (
@@ -98,19 +85,16 @@ export function NotificationPrompt() {
 						{t("notifPrompt.title")}
 					</p>
 					<p className="text-[12px] leading-relaxed text-text-secondary">
-						{result === "denied" ? t("push.denied") : t("notifPrompt.body")}
+						{t("notifPrompt.body")}
 					</p>
 				</div>
-				{result === "denied" ? null : (
-					<button
-						type="button"
-						onClick={enable}
-						disabled={busy}
-						className="shrink-0 rounded-md bg-primary px-4 py-2 text-[13px] font-semibold text-white active:scale-[0.98] disabled:opacity-60"
-					>
-						{t("notifPrompt.cta")}
-					</button>
-				)}
+				<button
+					type="button"
+					onClick={enable}
+					className="shrink-0 rounded-md bg-primary px-4 py-2 text-[13px] font-semibold text-white active:scale-[0.98]"
+				>
+					{t("notifPrompt.cta")}
+				</button>
 				<button
 					type="button"
 					onClick={dismiss}
