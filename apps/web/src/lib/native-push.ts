@@ -6,17 +6,27 @@ import { subscribeNativePush } from "@/server/subscribe-push";
  *
  * Dynamically imports the Capacitor plugins so the web bundle never pulls them
  * in; they only resolve inside the native runtime.
+ *
+ * `prompt` decides whether the OS permission dialog may be shown: app start
+ * passes `false` so an undecided user is asked by our own banner first (see
+ * components/NotificationPrompt.tsx), and only that banner prompts for real.
  */
-export async function registerNativePush(): Promise<
-	"registered" | "web" | "denied" | "error"
-> {
+export async function registerNativePush({
+	prompt = true,
+}: {
+	prompt?: boolean;
+} = {}): Promise<"registered" | "web" | "denied" | "error"> {
 	try {
 		const { Capacitor } = await import("@capacitor/core");
 		if (!Capacitor.isNativePlatform()) return "web";
 
 		const { PushNotifications } = await import("@capacitor/push-notifications");
-		const perm = await PushNotifications.requestPermissions();
-		if (perm.receive !== "granted") return "denied";
+		const current = await PushNotifications.checkPermissions();
+		if (current.receive !== "granted") {
+			if (!prompt) return "denied";
+			const perm = await PushNotifications.requestPermissions();
+			if (perm.receive !== "granted") return "denied";
+		}
 
 		await PushNotifications.register();
 		PushNotifications.addListener("registration", async (token) => {

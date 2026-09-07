@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { autoEnablePush } from "@/lib/firebase-push";
 import { registerNativePush } from "@/lib/native-push";
 import { getSession } from "@/server/session";
@@ -16,14 +17,16 @@ export const Route = createFileRoute("/_protected")({
 });
 
 function ProtectedLayout() {
-	// Native shell → FCM via Capacitor; web → FCM via Firebase (on by default).
+	// Refresh the push token when permission was already granted. Neither call
+	// prompts — an undecided user is asked by NotificationPrompt instead.
 	useEffect(() => {
-		void registerNativePush();
+		void registerNativePush({ prompt: false });
 		void autoEnablePush();
 	}, []);
 	return (
 		<>
 			<Outlet />
+			<NotificationPrompt />
 			<InstallPrompt />
 		</>
 	);

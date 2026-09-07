@@ -1,7 +1,11 @@
 import { getFirebaseConfig } from "@/server/queries";
 import { subscribeNativePush } from "@/server/subscribe-push";
 
-import { enablePush, isIosNeedingInstall, type PushResult } from "./push-client.ts";
+import {
+	enablePush,
+	isIosNeedingInstall,
+	type PushResult,
+} from "./push-client.ts";
 
 /**
  * Web push via Firebase Cloud Messaging. Obtains an FCM registration token with
@@ -72,15 +76,16 @@ export async function enableFirebasePush(): Promise<PushResult> {
 }
 
 /**
- * Best-effort enable on app load, so push is on by default without the user
- * tapping the Settings button. Silently refreshes the token when permission is
- * already granted; prompts once when it's still undecided. No-ops when the user
- * previously denied, and on the Capacitor native shell (handled by
- * registerNativePush). Failures are swallowed — the manual button remains.
+ * Token refresh on app load. Only runs when the user has ALREADY granted
+ * notification permission — it re-subscribes so the stored FCM token stays
+ * fresh. When permission is still undecided we deliberately do nothing here and
+ * let NotificationPrompt ask first, so the browser dialog never appears out of
+ * the blue. No-ops on the Capacitor native shell (registerNativePush handles
+ * it). Failures are swallowed — the manual button remains.
  */
 export async function autoEnablePush(): Promise<void> {
 	if (typeof window === "undefined" || !("Notification" in window)) return;
-	if (Notification.permission === "denied") return;
+	if (Notification.permission !== "granted") return;
 	try {
 		const { Capacitor } = await import("@capacitor/core");
 		if (Capacitor.isNativePlatform()) return;
