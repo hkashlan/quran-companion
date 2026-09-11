@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { DEFAULT_EXCUSE_DAYS_PER_MONTH } from "@quran/db/domain/excuse";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { CalendarPlus, ClipboardList, Plus, Share2, Users } from "lucide-react";
 import { useState } from "react";
 import { PendingRequests } from "@/components/PendingRequests";
@@ -8,6 +9,7 @@ import {
 	getJoinRequests,
 	getPlanChangeRequests,
 	getTeacherHome,
+	setCircleExcuseDays,
 } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/teacher/")({
@@ -117,6 +119,7 @@ function TeacherHome() {
 						<span className="flex items-center gap-1 text-[12px] text-text-light">
 							<Users size={14} /> {c.studentsCount} {t("teacher.members")}
 						</span>
+						<ExcuseDaysSetting circleId={c.id} value={c.excuseDaysPerMonth} />
 						{c.students.length > 0 ? (
 							<div className="flex flex-col divide-y divide-border border-t border-border">
 								{c.students.map((s) => (
@@ -154,6 +157,64 @@ function TeacherHome() {
 					</Card>
 				))}
 			</Section>
+		</div>
+	);
+}
+
+/**
+ * Per-circle monthly excuse-day allowance. Empty means "inherit the default",
+ * which is why the stored value is nullable — an explicit 0 from the teacher
+ * (no excuses at all) has to stay distinguishable from "never configured".
+ */
+function ExcuseDaysSetting({
+	circleId,
+	value,
+}: {
+	circleId: string;
+	value: number | null;
+}) {
+	const { t } = useI18n();
+	const router = useRouter();
+	const [busy, setBusy] = useState(false);
+
+	async function set(next: number | null) {
+		setBusy(true);
+		try {
+			await setCircleExcuseDays({
+				data: { circleId, excuseDaysPerMonth: next },
+			});
+			router.invalidate();
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	const effective = value ?? DEFAULT_EXCUSE_DAYS_PER_MONTH;
+	return (
+		<div className="flex items-center justify-between gap-2 text-[12px]">
+			<span className="text-text-secondary">{t("circle.excuseDays")}</span>
+			<div className="flex items-center gap-2">
+				<button
+					type="button"
+					disabled={busy || effective <= 0}
+					onClick={() => set(Math.max(0, effective - 1))}
+					className="h-7 w-7 rounded-md border border-border font-bold text-text-secondary disabled:opacity-40"
+				>
+					−
+				</button>
+				<span className="min-w-6 text-center font-bold text-text">
+					{effective}
+					{value == null ? <span className="text-text-light"> *</span> : null}
+				</span>
+				<button
+					type="button"
+					disabled={busy || effective >= 10}
+					onClick={() => set(Math.min(10, effective + 1))}
+					className="h-7 w-7 rounded-md border border-border font-bold text-text-secondary disabled:opacity-40"
+				>
+					+
+				</button>
+			</div>
 		</div>
 	);
 }

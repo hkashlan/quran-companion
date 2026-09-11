@@ -1,7 +1,6 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import {
 	BookOpen,
-	ChevronLeft,
 	Clock,
 	LogOut,
 	MapPin,
@@ -9,7 +8,10 @@ import {
 	SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { BacklogSection } from "@/components/BacklogList";
 import { DailyProgress } from "@/components/DailyProgress";
+import { ExcuseDayButton } from "@/components/ExcuseDayButton";
+import { PlanResetCard } from "@/components/PlanResetCard";
 import {
 	Button,
 	Card,
@@ -28,6 +30,9 @@ import {
 } from "@/server/queries";
 
 export type StudentHomeData = Awaited<ReturnType<typeof getStudentHome>>;
+
+/** Scroll target shared by the backlog "reset your plan" CTA and the card. */
+const RESET_ANCHOR = "plan-reset-card";
 
 type EditableReview = {
 	id: string;
@@ -355,6 +360,15 @@ export function StudentHomeBody({
 
 			<PendingRequestsSection requests={data.pendingRequests} />
 
+			<BacklogSection
+				backlog={data.backlog}
+				resetCardShown={data.backlog.showResetCard}
+			/>
+
+			{data.backlog.showResetCard ? (
+				<PlanResetCard anchorId={RESET_ANCHOR} />
+			) : null}
+
 			<Section title={t("home.activeReview")}>
 				{data.activeReview ? (
 					<Card className="flex flex-col gap-3">
@@ -365,7 +379,8 @@ export function StudentHomeBody({
 							review={data.activeReview}
 							streak={data.user.streak}
 						/>
-						{data.activeReview.startPage != null ? (
+						{data.activeReview.status === "excused" ? null : data.activeReview
+								.startPage != null ? (
 							<PagesProgressEditor review={data.activeReview} />
 						) : (
 							<Button
@@ -379,6 +394,7 @@ export function StudentHomeBody({
 								{t("home.submit")}
 							</Button>
 						)}
+						<ExcuseDayButton date={data.activeReview.assignedDate} />
 					</Card>
 				) : (
 					<Card className="text-center text-[13px] text-text-secondary">
@@ -396,37 +412,6 @@ export function StudentHomeBody({
 					{planCard}
 				</Link>
 			)}
-
-			{data.undoneReviews.length > 0 ? (
-				<Section title={t("home.pendingReviews")}>
-					<Card className="flex flex-col gap-2 p-3">
-						{data.undoneReviews.map((r) => (
-							<button
-								type="button"
-								key={r.id}
-								onClick={() =>
-									router.navigate({
-										to: "/submit-review",
-										search: { reviewId: r.id },
-									})
-								}
-								className="flex items-center justify-between gap-2 rounded-md px-1 py-1 text-[12px] active:bg-primary-light"
-							>
-								<span className="flex items-center gap-2">
-									<span
-										className={`h-2 w-2 rounded-full ${r.status === "missed" ? "bg-error" : "bg-text-light"}`}
-									/>
-									<span className="text-text">{reviewRange(r)}</span>
-								</span>
-								<span className="flex items-center gap-1 text-text-light">
-									{r.assignedDate}
-									<ChevronLeft size={13} />
-								</span>
-							</button>
-						))}
-					</Card>
-				</Section>
-			) : null}
 
 			<ConfirmDialog
 				open={leavingId !== null}

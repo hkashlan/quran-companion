@@ -4,10 +4,12 @@
 
 export * from "./audit-log.drizzle.ts";
 export * from "./circle-membership.drizzle.ts";
+export * from "./excuse-day.drizzle.ts";
 export * from "./join-request.drizzle.ts";
 export * from "./learning-circle.drizzle.ts";
 export * from "./notification-delivery.drizzle.ts";
 export * from "./plan-change-request.drizzle.ts";
+export * from "./plan-reset-event.drizzle.ts";
 export * from "./push-token.drizzle.ts";
 export * from "./review-plan.drizzle.ts";
 export * from "./review-submission.drizzle.ts";

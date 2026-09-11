@@ -11,12 +11,19 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth.drizzle";
+import { planResetEvents } from "./plan-reset-event.drizzle";
 import { reviewPlans } from "./review-plan.drizzle";
 
 export const reviewStatusEnum = pgEnum("review_status", [
 	"pending",
 	"completed",
 	"missed",
+	// Forgiven by the student: dropped from the backlog without touching points or
+	// the "completed" count. Set by waiveReview and by a plan reset.
+	"waived",
+	// Covered by an excuse day: neither an achievement nor a miss. Kept out of the
+	// backlog, the on-time rate and the streak; the pages stay owed.
+	"excused",
 ]);
 
 export const reviews = pgTable(
@@ -48,6 +55,11 @@ export const reviews = pgTable(
 		completedAt: timestamp("completed_at"),
 		pointsEarned: integer("points_earned").default(0).notNull(),
 		status: reviewStatusEnum("status").default("pending").notNull(),
+		// When the student forgave this overdue day (status "waived").
+		waivedAt: timestamp("waived_at"),
+		// Set when the row was waived in bulk by a plan reset (null for a
+		// one-off waive from the backlog list).
+		resetEventId: uuid("reset_event_id").references(() => planResetEvents.id),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [

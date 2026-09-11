@@ -27,3 +27,6 @@ android/
 ios/
 capacitor-www/
 .vercel
+
+# local-only scratch notes (test credentials, scenario setup)
+*.local.md

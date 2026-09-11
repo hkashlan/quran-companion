@@ -26,7 +26,8 @@ function StudentDetail() {
 	const navigate = useNavigate();
 	const router = useRouter();
 	const { studentId } = Route.useSearch();
-	const { student, plan, reviews, sessions } = Route.useLoaderData();
+	const { student, plan, reviews, sessions, resetEvents, excuse } =
+		Route.useLoaderData();
 
 	if (!student)
 		return <div className="p-6 text-center text-text-secondary">—</div>;
@@ -104,6 +105,60 @@ function StudentDetail() {
 					</span>
 				)}
 			</Card>
+
+			{excuse.used > 0 ? (
+				<Card className="flex flex-col gap-1">
+					<span className="flex items-center justify-between text-[13px]">
+						<span className="font-bold text-text">
+							{t("detail.excuseUsage")}
+						</span>
+						<span className="text-text-secondary">
+							{t("detail.excuseUsed", {
+								used: String(excuse.used),
+								allowed: String(excuse.allowed),
+							})}
+						</span>
+					</span>
+					<span className="text-[11px] text-text-light">
+						{excuse.days.map((d) => d.date).join(" · ")}
+					</span>
+				</Card>
+			) : null}
+
+			{resetEvents.length > 0 ? (
+				<Card className="flex flex-col gap-2">
+					<span className="text-[13px] font-bold text-text">
+						{t("detail.resetEvents")}
+					</span>
+					{resetEvents.map((e) => (
+						<div
+							key={e.id}
+							className="flex flex-col gap-0.5 border-border border-b pb-2 last:border-0 last:pb-0"
+						>
+							<span className="flex items-center justify-between text-[12px]">
+								<span className="font-semibold text-text">
+									{t(`detail.reset.${e.strategy}`)}
+								</span>
+								<span className="text-text-light">
+									{e.createdAt.toISOString().slice(0, 10)}
+								</span>
+							</span>
+							<span className="text-[11px] text-text-secondary">
+								{t("detail.reset.backlog", { days: String(e.backlogDays) })}
+								{e.strategy === "distribute" && e.extraPagesPerDay
+									? ` · +${e.extraPagesPerDay} / ${e.catchupDays}`
+									: ""}
+								{e.strategy === "skip" && e.skippedPages
+									? ` · ${e.skippedFromPage}–${e.skippedToPage} (${e.skippedPages})`
+									: ""}
+								{e.khatmahBefore && e.khatmahAfter
+									? ` · ${e.khatmahBefore} → ${e.khatmahAfter}`
+									: ""}
+							</span>
+						</div>
+					))}
+				</Card>
+			) : null}
 
 			<ReviewProgress
 				reviews={reviews}

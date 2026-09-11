@@ -16,6 +16,10 @@
 	--color-success: #0a7b4f;
 	--color-error: #c53030;
 	--color-warning: #c8a44e;
+	/* Mid-severity amber, between the gold warning and the red error. Used for
+	   the backlog age gradient (fresh → ageing → stale) so escalation reads
+	   without spending "error" red on every overdue row. */
+	--color-warning-strong: #d97706;
 
 	--color-background: #fafbf9;
 	--color-surface: #ffffff;

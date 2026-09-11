@@ -1,4 +1,21 @@
 import { db } from "@quran/db/db";
+import {
+	backlogDebtPages,
+	collapseBacklog,
+	outstandingPageUnion,
+} from "@quran/db/domain/backlog";
+import {
+	canExcuse,
+	excuseAllowance,
+	excuseBalance,
+	monthKey,
+} from "@quran/db/domain/excuse";
+import {
+	CATCHUP_DAY_CHOICES,
+	distributePreview,
+	effectiveDailyAmount,
+	startTodayPreview,
+} from "@quran/db/domain/plan-reset";
 import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
 import {
 	createCircle,
@@ -19,11 +36,12 @@ import {
 	markRead,
 	unreadCount,
 } from "@quran/db/repositories/notification";
+import { excuseDays } from "@quran/db/tables/excuse-day.drizzle";
 import { joinRequests } from "@quran/db/tables/join-request.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { circleMateDoneMessage } from "./notification-i18n.ts";
@@ -247,6 +265,10 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 			.from(reviews)
 			.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "completed")));
 
+		// "On time" means the full 10 points were awarded — i.e. completed on the
+		// day it was assigned. Testing `completedAt is not null` would be vacuous:
+		// the cron only ever promotes a stamped row to "completed", so that
+		// predicate made the rate a permanent 100%. Same rule as ReviewProgress.
 		const [{ onTime }] = await db
 			.select({ onTime: count() })
 			.from(reviews)
@@ -254,7 +276,7 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 				and(
 					eq(reviews.studentId, u.id),
 					eq(reviews.status, "completed"),
-					sql`${reviews.completedAt} is not null`,
+					eq(reviews.pointsEarned, 10),
 				),
 			);
 
@@ -315,6 +337,15 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 		}
 		if (!activeReview) activeReview = pending[0] ?? null;
 
+		// Outstanding work: older pending + missed reviews, minus today's active
+		// review and any pages review that already met its target (still editable
+		// on the active-review card).
+		const undone = [...pending, ...missed].filter(
+			(r) =>
+				r.id !== activeReview?.id &&
+				!(r.rangeMode === "pages" && r.completedAt != null),
+		);
+
 		return {
 			user: {
 				id: u.id,
@@ -327,14 +358,13 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 			pendingRequests,
 			hasPendingPlanChange: pendingPlanChange.length > 0,
 			activeReview,
-			// Outstanding work: older pending + missed reviews, minus today's active
-			// review and any pages review that already met its target (still editable
-			// on the active-review card above).
-			undoneReviews: [...pending, ...missed].filter(
-				(r) =>
-					r.id !== activeReview?.id &&
-					!(r.rangeMode === "pages" && r.completedAt != null),
-			),
+			// Collapsed view for the home screen: newest few, colour-graded by age,
+			// with the escalation flags. Pages are a *union* — a missed day re-issues
+			// its window, so the rows overlap and must never be summed.
+			backlog: {
+				...collapseBacklog(undone, todayStr),
+				pages: outstandingPageUnion(undone),
+			},
 			stats: {
 				points: u.points,
 				completed: completedCount,
@@ -498,8 +528,12 @@ export const getLateStudents = createServerFn({ method: "GET" }).handler(
 				const r = reviewByStudent.get(s.id);
 				// No plan/review today → nothing due, so not "late".
 				if (!r || r.startPage == null || r.endPage == null) continue;
+				// An excused day counts as settled: the student asked for it and the
+				// day no longer counts against them, so they must not be chased.
 				const finished =
 					r.status === "completed" ||
+					r.status === "excused" ||
+					r.status === "waived" ||
 					(r.progressPage != null && r.progressPage >= r.endPage);
 				if (finished) continue;
 				const target = Math.max(1, r.endPage - r.startPage + 1);
@@ -750,11 +784,25 @@ export const getStudentDetail = createServerFn({ method: "GET" })
 			.from(sessionRecords)
 			.where(eq(sessionRecords.studentId, data.studentId))
 			.orderBy(sessionRecords.sessionDate);
+		// Self-serve plan resets need no teacher approval, so this log is how the
+		// teacher finds out what the student changed and by how much.
+		const { planResetEvents } = await import(
+			"@quran/db/tables/plan-reset-event.drizzle"
+		);
+		const resetEvents = await db
+			.select()
+			.from(planResetEvents)
+			.where(eq(planResetEvents.studentId, data.studentId))
+			.orderBy(desc(planResetEvents.createdAt))
+			.limit(10);
+		const excuse = await excuseStateFor(data.studentId, today());
 		return {
 			student: student ?? null,
 			plan: plan ?? null,
 			reviews: reviewRows,
 			sessions: sessionRows,
+			resetEvents,
+			excuse,
 		};
 	});
 
@@ -908,6 +956,10 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			dailyUnit: "pages",
 			isActive: true,
 			cursorReset: startPageChanged,
+			// The teacher's number wins: assigning a plan ends any catch-up window
+			// the student had started, rather than stacking an extra on top of it.
+			catchupExtraPages: null,
+			catchupUntil: null,
 		};
 		let planId: string;
 		let updated: boolean;
@@ -939,6 +991,8 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				endPage: values.endPage,
 				dailyAmount: values.dailyAmount,
 				cursorReset: values.cursorReset,
+				catchupExtraPages: values.catchupExtraPages,
+				catchupUntil: values.catchupUntil,
 			},
 			today(),
 		);
@@ -1270,6 +1324,624 @@ export const getSubmitReviewData = createServerFn({ method: "GET" })
 		return { review: review ?? null };
 	});
 
+/**
+ * Forgive overdue reviews. Used for backlog rows old enough that completing them
+ * would *cost* points (`calculatePoints` goes negative past two days late) — the
+ * student should be able to clear them without a penalty.
+ *
+ * Takes a list rather than a single id because a backlog is answered as a group:
+ * every missed day re-issues the same page window, so "let it go" is one decision
+ * about one range, not N decisions about N identical-looking rows.
+ *
+ * Deliberately leaves `pointsEarned` and the "completed" count untouched: this is
+ * an amnesty, not an achievement. Only reviews assigned before today can be
+ * waived, so a student can never waive away the work they owe today.
+ */
+export const waiveReview = createServerFn({ method: "POST" })
+	.validator(
+		z.object({ reviewIds: z.array(z.string().uuid()).min(1).max(200) }),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const todayStr = today();
+		const rows = await db
+			.select()
+			.from(reviews)
+			.where(
+				and(
+					inArray(reviews.id, data.reviewIds),
+					eq(reviews.studentId, u.id),
+					lt(reviews.assignedDate, todayStr),
+				),
+			);
+		if (rows.length === 0)
+			return { ok: false as const, error: "not_found" as const };
+
+		const pending = rows.filter((r) => r.status !== "waived");
+		if (pending.length > 0) {
+			await db
+				.update(reviews)
+				.set({ status: "waived", waivedAt: new Date() })
+				.where(
+					inArray(
+						reviews.id,
+						pending.map((r) => r.id),
+					),
+				);
+		}
+
+		// Waiving forgives the calendar days, not the pages: the cursor still sits
+		// where the student actually stopped, so later windows re-derive from the
+		// progress that stands (a no-op when the days had no progress at all).
+		// Re-anchor from the *oldest* row, since recalcFutureReviews only touches
+		// what comes after the row it is given.
+		const oldest = rows.reduce((a, b) =>
+			a.assignedDate <= b.assignedDate ? a : b,
+		);
+		if (oldest.reviewPlanId) {
+			const { recalcFutureReviews } = await import("./scheduler.ts");
+			await recalcFutureReviews(oldest.reviewPlanId, {
+				assignedDate: oldest.assignedDate,
+				progressPage: oldest.progressPage,
+				startPage: oldest.startPage,
+				endPage: oldest.endPage,
+			});
+		}
+		return { ok: true as const, waived: pending.length };
+	});
+
+/**
+ * Load everything the plan-reset card needs, with all three strategies costed out
+ * so the student sees the numeric consequence of each *before* confirming.
+ *
+ * `cursorPage` is where the student is actually stuck — the first page of today's
+ * window. Because a missed day re-issues its window, that page has not moved for
+ * the whole backlog, which is exactly what makes the debt `daily × overdueDays`.
+ */
+export const getPlanResetPreview = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
+		const [plan] = await db
+			.select()
+			.from(reviewPlans)
+			.where(
+				and(eq(reviewPlans.studentId, u.id), eq(reviewPlans.isActive, true)),
+			)
+			.limit(1);
+		if (!plan) return { ok: false as const, error: "no_plan" as const };
+
+		const todayStr = today();
+		const overdue = await db
+			.select()
+			.from(reviews)
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.reviewPlanId, plan.id),
+					inArray(reviews.status, ["pending", "missed"]),
+					lt(reviews.assignedDate, todayStr),
+				),
+			)
+			.orderBy(asc(reviews.assignedDate));
+		if (overdue.length === 0)
+			return { ok: false as const, error: "no_backlog" as const };
+
+		const [todayReview] = await db
+			.select({ startPage: reviews.startPage })
+			.from(reviews)
+			.where(
+				and(
+					eq(reviews.reviewPlanId, plan.id),
+					eq(reviews.assignedDate, todayStr),
+				),
+			)
+			.orderBy(desc(reviews.createdAt))
+			.limit(1);
+
+		const input = {
+			today: todayStr,
+			dailyAmount: plan.dailyAmount,
+			planStartPage: plan.startPage ?? 1,
+			planEndPage: plan.endPage ?? MUSHAF_PAGES,
+			cursorPage:
+				todayReview?.startPage ?? overdue[0].startPage ?? plan.startPage ?? 1,
+			overdueDays: overdue.length,
+		};
+
+		const { planChangeRequests } = await import(
+			"@quran/db/tables/plan-change-request.drizzle"
+		);
+		const blocking = await db
+			.select({ id: planChangeRequests.id })
+			.from(planChangeRequests)
+			.where(
+				and(
+					eq(planChangeRequests.reviewPlanId, plan.id),
+					eq(planChangeRequests.status, "pending"),
+				),
+			)
+			.limit(1);
+
+		return {
+			ok: true as const,
+			backlog: {
+				days: overdue.length,
+				pages: outstandingPageUnion(overdue),
+				debtPages: backlogDebtPages(overdue.length, plan.dailyAmount),
+				oldestDate: overdue[0].assignedDate,
+			},
+			dailyAmount: plan.dailyAmount,
+			cursorPage: input.cursorPage,
+			planEndPage: input.planEndPage,
+			catchupActive: plan.catchupUntil != null,
+			pendingPlanChange: blocking.length > 0,
+			distribute: CATCHUP_DAY_CHOICES.map((d) => distributePreview(input, d)),
+			startToday: startTodayPreview(input),
+		};
+	},
+);
+
+/**
+ * Apply one of the three exits. Every strategy waives the overdue rows; they
+ * differ only in what happens to the plan going forward:
+ *
+ *   distribute → raise the daily amount for a fixed catch-up window
+ *   extend     → nothing; forgiving the backlog is the whole effect
+ *   skip       → jump today's window forward past the pages that were missed
+ *
+ * Never trusts the client's numbers: the preview is recomputed here from the
+ * rows as they stand. Points and the "completed" count are never touched — a
+ * reset is an amnesty, not a penalty.
+ */
+export const applyPlanReset = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			strategy: z.enum(["distribute", "skip"]),
+			catchupDays: z.number().int().min(3).max(60).optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
+		const { planResetEvents } = await import(
+			"@quran/db/tables/plan-reset-event.drizzle"
+		);
+		const { planChangeRequests } = await import(
+			"@quran/db/tables/plan-change-request.drizzle"
+		);
+
+		const [plan] = await db
+			.select()
+			.from(reviewPlans)
+			.where(
+				and(eq(reviewPlans.studentId, u.id), eq(reviewPlans.isActive, true)),
+			)
+			.limit(1);
+		if (!plan) return { ok: false as const, error: "no_plan" as const };
+
+		// A queued plan-change request also mutates dailyAmount. Two writers racing
+		// on the same number would leave the student with a plan neither of them
+		// described, so the reset defers until the teacher has answered.
+		const blocking = await db
+			.select({ id: planChangeRequests.id })
+			.from(planChangeRequests)
+			.where(
+				and(
+					eq(planChangeRequests.reviewPlanId, plan.id),
+					eq(planChangeRequests.status, "pending"),
+				),
+			)
+			.limit(1);
+		if (blocking.length > 0)
+			return { ok: false as const, error: "pending_plan_change" as const };
+
+		const todayStr = today();
+		const overdue = await db
+			.select()
+			.from(reviews)
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.reviewPlanId, plan.id),
+					inArray(reviews.status, ["pending", "missed"]),
+					lt(reviews.assignedDate, todayStr),
+				),
+			)
+			.orderBy(asc(reviews.assignedDate));
+		if (overdue.length === 0)
+			return { ok: false as const, error: "no_backlog" as const };
+
+		// Today's row must exist before we can move it (the cron may not have run).
+		const { ensureTodayReview } = await import("./scheduler.ts");
+		await ensureTodayReview(plan, todayStr);
+		const loadToday = async () =>
+			(
+				await db
+					.select()
+					.from(reviews)
+					.where(
+						and(
+							eq(reviews.reviewPlanId, plan.id),
+							eq(reviews.assignedDate, todayStr),
+						),
+					)
+					.orderBy(desc(reviews.createdAt))
+					.limit(1)
+			)[0] ?? null;
+		const todayReview = await loadToday();
+		if (!todayReview) return { ok: false as const, error: "no_plan" as const };
+
+		const input = {
+			today: todayStr,
+			dailyAmount: plan.dailyAmount,
+			planStartPage: plan.startPage ?? 1,
+			planEndPage: plan.endPage ?? MUSHAF_PAGES,
+			cursorPage: todayReview.startPage ?? plan.startPage ?? 1,
+			overdueDays: overdue.length,
+		};
+
+		const catchupDays = data.catchupDays ?? CATCHUP_DAY_CHOICES[1];
+		if (
+			data.strategy === "distribute" &&
+			!CATCHUP_DAY_CHOICES.includes(
+				catchupDays as (typeof CATCHUP_DAY_CHOICES)[number],
+			)
+		)
+			return { ok: false as const, error: "invalid" as const };
+
+		const dist =
+			data.strategy === "distribute"
+				? distributePreview(input, catchupDays)
+				: null;
+		const start = data.strategy === "skip" ? startTodayPreview(input) : null;
+
+		const [event] = await db
+			.insert(planResetEvents)
+			.values({
+				reviewPlanId: plan.id,
+				studentId: u.id,
+				teacherId: plan.teacherId,
+				strategy: data.strategy,
+				backlogDays: overdue.length,
+				backlogPages: outstandingPageUnion(overdue),
+				waivedCount: overdue.length,
+				extraPagesPerDay: dist?.extraPerDay ?? null,
+				catchupDays: dist?.catchupDays ?? null,
+				catchupUntil: dist?.catchupUntil ?? null,
+				// Nothing is written off any more: "start today" forgives the calendar
+				// days, never the pages. The columns stay for events recorded before
+				// that changed.
+				skippedFromPage: null,
+				skippedToPage: null,
+				skippedPages: null,
+				khatmahBefore: dist?.khatmahBefore ?? start?.khatmahBefore ?? null,
+				khatmahAfter: dist?.khatmahAfter ?? start?.khatmahAfter ?? null,
+			})
+			.returning();
+
+		// Waive the backlog. `lt(assignedDate, today)` keeps today's row live.
+		await db
+			.update(reviews)
+			.set({ status: "waived", waivedAt: new Date(), resetEventId: event.id })
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.reviewPlanId, plan.id),
+					inArray(reviews.status, ["pending", "missed"]),
+					lt(reviews.assignedDate, todayStr),
+				),
+			);
+
+		if (dist) {
+			// Set, never increment: a student who distributes, lapses again and
+			// distributes a second time gets one window sized for the new backlog —
+			// two stacked catch-ups would be unpayable.
+			await db
+				.update(reviewPlans)
+				.set({
+					catchupExtraPages: dist.extraPerDay,
+					catchupUntil: dist.catchupUntil,
+				})
+				.where(eq(reviewPlans.id, plan.id));
+		}
+
+		// Re-derive today's window in place. `ensureTodayReview` is idempotent, so it
+		// will not touch a row that already exists — without this the reset would
+		// only take effect tomorrow, and "today's goal" would contradict the
+		// preview the student just confirmed.
+		const todayDaily = effectiveDailyAmount(
+			{
+				dailyAmount: plan.dailyAmount,
+				catchupExtraPages: dist?.extraPerDay ?? null,
+				catchupUntil: dist?.catchupUntil ?? null,
+			},
+			todayStr,
+		);
+		// Neither strategy moves the cursor, so only the window's *width* can change
+		// here — distribute widens it by the catch-up extra. Any progress already
+		// recorded today stays valid because the window still starts where it did.
+		const newStart = todayReview.startPage ?? input.cursorPage;
+		const newEnd = Math.min(
+			newStart + Math.max(1, todayDaily) - 1,
+			input.planEndPage,
+		);
+		if (newEnd !== todayReview.endPage) {
+			await db
+				.update(reviews)
+				.set({ startPage: newStart, endPage: newEnd })
+				.where(eq(reviews.id, todayReview.id));
+		}
+
+		const refreshed = (await loadToday()) ?? todayReview;
+
+		// Tell the teacher: the student resets on their own, but never silently.
+		const { notificationDeliveries } = await import(
+			"@quran/db/tables/notification-delivery.drizzle"
+		);
+		const label =
+			data.strategy === "distribute"
+				? `وزّع المتأخر على ${dist?.catchupDays} يومًا (+${dist?.extraPerDay} صفحة يوميًا)`
+				: `بدأ من اليوم — يتأخر الختم ${start?.delayDays} يومًا`;
+		const title = "إعادة ضبط الخطة";
+		const body = `${u.name} ${label} بعد ${overdue.length} يومًا متأخرًا`;
+		await db
+			.insert(notificationDeliveries)
+			.values({
+				userId: plan.teacherId,
+				eventType: "plan_reset",
+				title,
+				body,
+				status: "sent",
+				dedupeKey: `plan_reset:${event.id}`,
+				sentAt: new Date(),
+			})
+			.onConflictDoNothing({ target: notificationDeliveries.dedupeKey });
+		await sendPush(plan.teacherId, {
+			title,
+			body,
+			data: { url: `/student-detail?studentId=${u.id}` },
+		});
+
+		return {
+			ok: true as const,
+			eventId: event.id,
+			today: {
+				startPage: refreshed.startPage,
+				endPage: refreshed.endPage,
+				dailyAmount: todayDaily,
+			},
+		};
+	});
+
+/**
+ * A student's excuse-day standing for the current month. The allowance comes
+ * from the circles they learn in (most generous wins, null inherits the global
+ * default); usage is counted, never stored, so it resets on the 1st by itself.
+ */
+async function excuseStateFor(userId: string, todayStr: string) {
+	const { circleMemberships } = await import(
+		"@quran/db/tables/circle-membership.drizzle"
+	);
+	const { learningCircles } = await import(
+		"@quran/db/tables/learning-circle.drizzle"
+	);
+	const circles = await db
+		.select({ allowance: learningCircles.excuseDaysPerMonth })
+		.from(circleMemberships)
+		.innerJoin(
+			learningCircles,
+			eq(circleMemberships.circleId, learningCircles.id),
+		)
+		.where(
+			and(
+				eq(circleMemberships.userId, userId),
+				eq(circleMemberships.role, "student"),
+			),
+		);
+	const allowed = excuseAllowance(circles.map((c) => c.allowance));
+
+	const month = monthKey(todayStr);
+	const days = await db
+		.select({ date: excuseDays.date, reason: excuseDays.reason })
+		.from(excuseDays)
+		.where(
+			and(
+				eq(excuseDays.userId, userId),
+				sql`to_char(${excuseDays.date}, 'YYYY-MM') = ${month}`,
+			),
+		)
+		.orderBy(desc(excuseDays.date));
+
+	return { ...excuseBalance(allowed, days.length), month, days };
+}
+
+export const getExcuseStatus = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const todayStr = today();
+		const state = await excuseStateFor(u.id, todayStr);
+		return {
+			...state,
+			todayExcused: state.days.some((d) => d.date === todayStr),
+		};
+	},
+);
+
+/**
+ * Mark a day as excused. The day's review becomes "excused": not an achievement
+ * and not a miss — it leaves the backlog, the on-time rate and the streak alone,
+ * while the pages stay owed (the window is simply re-issued).
+ */
+export const excuseDayFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+			reason: z.string().trim().max(200).optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const todayStr = today();
+		const state = await excuseStateFor(u.id, todayStr);
+		if (state.days.some((d) => d.date === data.date))
+			return { ok: false as const, error: "already_excused" as const };
+
+		const verdict = canExcuse(data.date, todayStr, state.remaining);
+		if (!verdict.ok) return { ok: false as const, error: verdict.reason };
+
+		await db
+			.insert(excuseDays)
+			.values({ userId: u.id, date: data.date, reason: data.reason ?? null })
+			.onConflictDoNothing();
+
+		// Take that day's review out of the backlog. Only an unfinished day can be
+		// excused away — a completed review keeps its points and its status.
+		await db
+			.update(reviews)
+			.set({ status: "excused" })
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.assignedDate, data.date),
+					inArray(reviews.status, ["pending", "missed"]),
+					sql`${reviews.completedAt} is null`,
+				),
+			);
+
+		return { ok: true as const, remaining: Math.max(0, state.remaining - 1) };
+	});
+
+/** Undo an excuse, returning the day to the backlog. Same 24-hour window. */
+export const removeExcuseDay = createServerFn({ method: "POST" })
+	.validator(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const todayStr = today();
+		const verdict = canExcuse(data.date, todayStr, 1);
+		if (!verdict.ok && verdict.reason === "too_old")
+			return { ok: false as const, error: "too_old" as const };
+
+		const removed = await db
+			.delete(excuseDays)
+			.where(and(eq(excuseDays.userId, u.id), eq(excuseDays.date, data.date)))
+			.returning({ id: excuseDays.id });
+		if (removed.length === 0)
+			return { ok: false as const, error: "not_found" as const };
+
+		await db
+			.update(reviews)
+			.set({ status: data.date >= todayStr ? "pending" : "missed" })
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.assignedDate, data.date),
+					eq(reviews.status, "excused"),
+				),
+			);
+		return { ok: true as const };
+	});
+
+/**
+ * Teacher: set the circle's monthly allowance (null = inherit the default).
+ * Unlike most mutations here, requireUser() alone is not enough — this changes a
+ * rule for every student in the circle, so the caller must own it.
+ */
+export const setCircleExcuseDays = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			circleId: z.string().uuid(),
+			excuseDaysPerMonth: z.number().int().min(0).max(10).nullable(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { learningCircles } = await import(
+			"@quran/db/tables/learning-circle.drizzle"
+		);
+		const updated = await db
+			.update(learningCircles)
+			.set({ excuseDaysPerMonth: data.excuseDaysPerMonth })
+			.where(
+				and(
+					eq(learningCircles.id, data.circleId),
+					eq(learningCircles.ownerTeacherId, u.id),
+				),
+			)
+			.returning({ id: learningCircles.id });
+		if (updated.length === 0)
+			return { ok: false as const, error: "forbidden" as const };
+		return { ok: true as const };
+	});
+
+/** Teacher: this month's excuse usage for every student in one circle. */
+export const getCircleExcuseUsage = createServerFn({ method: "GET" })
+	.validator(z.object({ circleId: z.string().uuid() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { learningCircles } = await import(
+			"@quran/db/tables/learning-circle.drizzle"
+		);
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
+		const [circle] = await db
+			.select()
+			.from(learningCircles)
+			.where(
+				and(
+					eq(learningCircles.id, data.circleId),
+					eq(learningCircles.ownerTeacherId, u.id),
+				),
+			)
+			.limit(1);
+		if (!circle) return { ok: false as const, error: "forbidden" as const };
+
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		const students = await db
+			.select({ id: userTable.id, name: userTable.name })
+			.from(circleMemberships)
+			.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+			.where(
+				and(
+					eq(circleMemberships.circleId, data.circleId),
+					eq(circleMemberships.role, "student"),
+				),
+			);
+
+		const month = monthKey(today());
+		const rows = await db
+			.select({ userId: excuseDays.userId, date: excuseDays.date })
+			.from(excuseDays)
+			.where(
+				and(
+					inArray(
+						excuseDays.userId,
+						students.map((s) => s.id),
+					),
+					sql`to_char(${excuseDays.date}, 'YYYY-MM') = ${month}`,
+				),
+			);
+
+		return {
+			ok: true as const,
+			excuseDaysPerMonth: circle.excuseDaysPerMonth,
+			allowed: excuseAllowance([circle.excuseDaysPerMonth]),
+			month,
+			students: students.map((s) => {
+				const dates = rows
+					.filter((r) => r.userId === s.id)
+					.map((r) => r.date)
+					.sort();
+				return { id: s.id, name: s.name, used: dates.length, dates };
+			}),
+		};
+	});
+
 /** Student: report page progress → completes + scores the review once the target is met. */
 export const submitReview = createServerFn({ method: "POST" })
 	.validator(
@@ -1281,7 +1953,7 @@ export const submitReview = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const u = await requireUser();
-		const { calculatePoints, nextStreak, applyPoints } = await import(
+		const { calculatePoints, nextStreak, applyPoints, diffDays } = await import(
 			"@quran/db/domain/scoring"
 		);
 		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
@@ -1319,7 +1991,29 @@ export const submitReview = createServerFn({ method: "POST" })
 				.set({ progressPage, completedAt: new Date(), pointsEarned: earned })
 				.where(eq(reviews.id, review.id));
 			const newPoints = applyPoints(u.points, earned);
-			const newStreak = nextStreak(u.streak, streakLastDate, todayStr);
+			// Days the student excused since their last completion don't break the
+			// chain. Only the gap matters, so nothing is loaded when there isn't one.
+			const excusedDates =
+				streakLastDate && diffDays(todayStr, streakLastDate) > 1
+					? (
+							await db
+								.select({ date: excuseDays.date })
+								.from(excuseDays)
+								.where(
+									and(
+										eq(excuseDays.userId, u.id),
+										gt(excuseDays.date, streakLastDate),
+										lt(excuseDays.date, todayStr),
+									),
+								)
+						).map((r) => r.date)
+					: [];
+			const newStreak = nextStreak(
+				u.streak,
+				streakLastDate,
+				todayStr,
+				excusedDates,
+			);
 			await db
 				.update(userTable)
 				.set({

@@ -1,5 +1,6 @@
 import {
 	boolean,
+	date,
 	index,
 	integer,
 	pgTable,
@@ -39,6 +40,11 @@ export const reviewPlans = pgTable(
 		// re-anchors to startPage instead of continuing from progress. Cleared once
 		// that review is created.
 		cursorReset: boolean("cursor_reset").default(false).notNull(),
+		// Temporary catch-up after a "distribute" plan reset: extra pages added to
+		// dailyAmount on every day up to and including catchupUntil, after which
+		// ensureTodayReview clears both columns and the base amount resumes.
+		catchupExtraPages: integer("catchup_extra_pages"),
+		catchupUntil: date("catchup_until"),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [

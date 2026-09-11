@@ -140,11 +140,16 @@ export function ReviewProgress({
 									className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-[12px]"
 								>
 									<span
-										className={`h-2 w-2 rounded-full ${r.status === "completed" ? "bg-success" : r.status === "missed" ? "bg-error" : "bg-text-light"}`}
+										className={`h-2 w-2 rounded-full ${r.status === "completed" ? "bg-success" : r.status === "missed" ? "bg-error" : "bg-text-light/60"}`}
 									/>
 									<span className="flex-1 font-semibold text-text">
 										{reviewRange(r)}
 									</span>
+									{r.status === "excused" ? (
+										<span className="rounded-full bg-background px-2 py-0.5 text-[11px] text-text-secondary">
+											{t("excuse.dayLabel")}
+										</span>
+									) : null}
 									<span className="text-text-light">{r.assignedDate}</span>
 									{r.pointsEarned !== 0 ? (
 										<span
