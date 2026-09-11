@@ -38,10 +38,11 @@ type PendingAction = "done" | "waive";
  */
 export function BacklogSection({
 	backlog,
-	onReset,
+	resetCardShown,
 }: {
 	backlog: Backlog;
-	onReset?: () => void;
+	/** Whether the plan-reset card is on screen; it changes what we defer to. */
+	resetCardShown?: boolean;
 }) {
 	const { t } = useI18n();
 	const router = useRouter();
@@ -53,6 +54,12 @@ export function BacklogSection({
 	if (backlog.total === 0 || !summary) return null;
 
 	if (backlog.suppressList) {
+		// Past this many days the list stops being useful and the plan reset is the
+		// only sane answer — which the reset card, sitting directly below, already
+		// states with its own numbers. Repeating it here would be two cards in a row
+		// asking for the same tap, so defer to it entirely and only put up an
+		// invitation of our own when no reset card is being shown.
+		if (resetCardShown) return null;
 		const cta = (
 			<Card className="flex flex-col gap-3">
 				<div className="flex flex-col gap-1">
@@ -63,15 +70,9 @@ export function BacklogSection({
 						{t("backlog.resetCtaHint")}
 					</span>
 				</div>
-				{onReset ? (
-					<Button variant="outline" onClick={onReset}>
-						{t("backlog.resetCta")}
-					</Button>
-				) : (
-					<Link to="/student/plan" className="block">
-						<Button variant="outline">{t("backlog.resetCta")}</Button>
-					</Link>
-				)}
+				<Link to="/student/plan" className="block">
+					<Button variant="outline">{t("backlog.resetCta")}</Button>
+				</Link>
 			</Card>
 		);
 		return <Section title={t("backlog.title")}>{cta}</Section>;

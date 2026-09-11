@@ -360,6 +360,11 @@ export function StudentHomeBody({
 
 			<PendingRequestsSection requests={data.pendingRequests} />
 
+			<BacklogSection
+				backlog={data.backlog}
+				resetCardShown={data.backlog.showResetCard}
+			/>
+
 			{data.backlog.showResetCard ? (
 				<PlanResetCard anchorId={RESET_ANCHOR} />
 			) : null}
@@ -407,18 +412,6 @@ export function StudentHomeBody({
 					{planCard}
 				</Link>
 			)}
-
-			<BacklogSection
-				backlog={data.backlog}
-				onReset={
-					data.backlog.showResetCard
-						? () =>
-								document
-									.getElementById(RESET_ANCHOR)
-									?.scrollIntoView({ behavior: "smooth", block: "start" })
-						: undefined
-				}
-			/>
 
 			<ConfirmDialog
 				open={leavingId !== null}
