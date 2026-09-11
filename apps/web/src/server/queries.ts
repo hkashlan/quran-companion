@@ -5,6 +5,12 @@ import {
 	outstandingPageUnion,
 } from "@quran/db/domain/backlog";
 import {
+	canExcuse,
+	excuseAllowance,
+	excuseBalance,
+	monthKey,
+} from "@quran/db/domain/excuse";
+import {
 	CATCHUP_DAY_CHOICES,
 	distributePreview,
 	effectiveDailyAmount,
@@ -31,11 +37,12 @@ import {
 	markRead,
 	unreadCount,
 } from "@quran/db/repositories/notification";
+import { excuseDays } from "@quran/db/tables/excuse-day.drizzle";
 import { joinRequests } from "@quran/db/tables/join-request.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { and, asc, count, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { circleMateDoneMessage } from "./notification-i18n.ts";
@@ -522,8 +529,12 @@ export const getLateStudents = createServerFn({ method: "GET" }).handler(
 				const r = reviewByStudent.get(s.id);
 				// No plan/review today → nothing due, so not "late".
 				if (!r || r.startPage == null || r.endPage == null) continue;
+				// An excused day counts as settled: the student asked for it and the
+				// day no longer counts against them, so they must not be chased.
 				const finished =
 					r.status === "completed" ||
+					r.status === "excused" ||
+					r.status === "waived" ||
 					(r.progressPage != null && r.progressPage >= r.endPage);
 				if (finished) continue;
 				const target = Math.max(1, r.endPage - r.startPage + 1);
@@ -785,12 +796,14 @@ export const getStudentDetail = createServerFn({ method: "GET" })
 			.where(eq(planResetEvents.studentId, data.studentId))
 			.orderBy(desc(planResetEvents.createdAt))
 			.limit(10);
+		const excuse = await excuseStateFor(data.studentId, today());
 		return {
 			student: student ?? null,
 			plan: plan ?? null,
 			reviews: reviewRows,
 			sessions: sessionRows,
 			resetEvents,
+			excuse,
 		};
 	});
 
@@ -1698,6 +1711,230 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 		};
 	});
 
+/**
+ * A student's excuse-day standing for the current month. The allowance comes
+ * from the circles they learn in (most generous wins, null inherits the global
+ * default); usage is counted, never stored, so it resets on the 1st by itself.
+ */
+async function excuseStateFor(userId: string, todayStr: string) {
+	const { circleMemberships } = await import(
+		"@quran/db/tables/circle-membership.drizzle"
+	);
+	const { learningCircles } = await import(
+		"@quran/db/tables/learning-circle.drizzle"
+	);
+	const circles = await db
+		.select({ allowance: learningCircles.excuseDaysPerMonth })
+		.from(circleMemberships)
+		.innerJoin(
+			learningCircles,
+			eq(circleMemberships.circleId, learningCircles.id),
+		)
+		.where(
+			and(
+				eq(circleMemberships.userId, userId),
+				eq(circleMemberships.role, "student"),
+			),
+		);
+	const allowed = excuseAllowance(circles.map((c) => c.allowance));
+
+	const month = monthKey(todayStr);
+	const days = await db
+		.select({ date: excuseDays.date, reason: excuseDays.reason })
+		.from(excuseDays)
+		.where(
+			and(
+				eq(excuseDays.userId, userId),
+				sql`to_char(${excuseDays.date}, 'YYYY-MM') = ${month}`,
+			),
+		)
+		.orderBy(desc(excuseDays.date));
+
+	return { ...excuseBalance(allowed, days.length), month, days };
+}
+
+export const getExcuseStatus = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const todayStr = today();
+		const state = await excuseStateFor(u.id, todayStr);
+		return {
+			...state,
+			todayExcused: state.days.some((d) => d.date === todayStr),
+		};
+	},
+);
+
+/**
+ * Mark a day as excused. The day's review becomes "excused": not an achievement
+ * and not a miss — it leaves the backlog, the on-time rate and the streak alone,
+ * while the pages stay owed (the window is simply re-issued).
+ */
+export const excuseDayFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+			reason: z.string().trim().max(200).optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const todayStr = today();
+		const state = await excuseStateFor(u.id, todayStr);
+		if (state.days.some((d) => d.date === data.date))
+			return { ok: false as const, error: "already_excused" as const };
+
+		const verdict = canExcuse(data.date, todayStr, state.remaining);
+		if (!verdict.ok) return { ok: false as const, error: verdict.reason };
+
+		await db
+			.insert(excuseDays)
+			.values({ userId: u.id, date: data.date, reason: data.reason ?? null })
+			.onConflictDoNothing();
+
+		// Take that day's review out of the backlog. Only an unfinished day can be
+		// excused away — a completed review keeps its points and its status.
+		await db
+			.update(reviews)
+			.set({ status: "excused" })
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.assignedDate, data.date),
+					inArray(reviews.status, ["pending", "missed"]),
+					sql`${reviews.completedAt} is null`,
+				),
+			);
+
+		return { ok: true as const, remaining: Math.max(0, state.remaining - 1) };
+	});
+
+/** Undo an excuse, returning the day to the backlog. Same 24-hour window. */
+export const removeExcuseDay = createServerFn({ method: "POST" })
+	.validator(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const todayStr = today();
+		const verdict = canExcuse(data.date, todayStr, 1);
+		if (!verdict.ok && verdict.reason === "too_old")
+			return { ok: false as const, error: "too_old" as const };
+
+		const removed = await db
+			.delete(excuseDays)
+			.where(and(eq(excuseDays.userId, u.id), eq(excuseDays.date, data.date)))
+			.returning({ id: excuseDays.id });
+		if (removed.length === 0)
+			return { ok: false as const, error: "not_found" as const };
+
+		await db
+			.update(reviews)
+			.set({ status: data.date >= todayStr ? "pending" : "missed" })
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.assignedDate, data.date),
+					eq(reviews.status, "excused"),
+				),
+			);
+		return { ok: true as const };
+	});
+
+/**
+ * Teacher: set the circle's monthly allowance (null = inherit the default).
+ * Unlike most mutations here, requireUser() alone is not enough — this changes a
+ * rule for every student in the circle, so the caller must own it.
+ */
+export const setCircleExcuseDays = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			circleId: z.string().uuid(),
+			excuseDaysPerMonth: z.number().int().min(0).max(10).nullable(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { learningCircles } = await import(
+			"@quran/db/tables/learning-circle.drizzle"
+		);
+		const updated = await db
+			.update(learningCircles)
+			.set({ excuseDaysPerMonth: data.excuseDaysPerMonth })
+			.where(
+				and(
+					eq(learningCircles.id, data.circleId),
+					eq(learningCircles.ownerTeacherId, u.id),
+				),
+			)
+			.returning({ id: learningCircles.id });
+		if (updated.length === 0)
+			return { ok: false as const, error: "forbidden" as const };
+		return { ok: true as const };
+	});
+
+/** Teacher: this month's excuse usage for every student in one circle. */
+export const getCircleExcuseUsage = createServerFn({ method: "GET" })
+	.validator(z.object({ circleId: z.string().uuid() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { learningCircles } = await import(
+			"@quran/db/tables/learning-circle.drizzle"
+		);
+		const { circleMemberships } = await import(
+			"@quran/db/tables/circle-membership.drizzle"
+		);
+		const [circle] = await db
+			.select()
+			.from(learningCircles)
+			.where(
+				and(
+					eq(learningCircles.id, data.circleId),
+					eq(learningCircles.ownerTeacherId, u.id),
+				),
+			)
+			.limit(1);
+		if (!circle) return { ok: false as const, error: "forbidden" as const };
+
+		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
+		const students = await db
+			.select({ id: userTable.id, name: userTable.name })
+			.from(circleMemberships)
+			.innerJoin(userTable, eq(circleMemberships.userId, userTable.id))
+			.where(
+				and(
+					eq(circleMemberships.circleId, data.circleId),
+					eq(circleMemberships.role, "student"),
+				),
+			);
+
+		const month = monthKey(today());
+		const rows = await db
+			.select({ userId: excuseDays.userId, date: excuseDays.date })
+			.from(excuseDays)
+			.where(
+				and(
+					inArray(
+						excuseDays.userId,
+						students.map((s) => s.id),
+					),
+					sql`to_char(${excuseDays.date}, 'YYYY-MM') = ${month}`,
+				),
+			);
+
+		return {
+			ok: true as const,
+			excuseDaysPerMonth: circle.excuseDaysPerMonth,
+			allowed: excuseAllowance([circle.excuseDaysPerMonth]),
+			month,
+			students: students.map((s) => {
+				const dates = rows
+					.filter((r) => r.userId === s.id)
+					.map((r) => r.date)
+					.sort();
+				return { id: s.id, name: s.name, used: dates.length, dates };
+			}),
+		};
+	});
+
 /** Student: report page progress → completes + scores the review once the target is met. */
 export const submitReview = createServerFn({ method: "POST" })
 	.validator(
@@ -1709,7 +1946,7 @@ export const submitReview = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const u = await requireUser();
-		const { calculatePoints, nextStreak, applyPoints } = await import(
+		const { calculatePoints, nextStreak, applyPoints, diffDays } = await import(
 			"@quran/db/domain/scoring"
 		);
 		const { user: userTable } = await import("@quran/db/tables/auth.drizzle");
@@ -1747,7 +1984,29 @@ export const submitReview = createServerFn({ method: "POST" })
 				.set({ progressPage, completedAt: new Date(), pointsEarned: earned })
 				.where(eq(reviews.id, review.id));
 			const newPoints = applyPoints(u.points, earned);
-			const newStreak = nextStreak(u.streak, streakLastDate, todayStr);
+			// Days the student excused since their last completion don't break the
+			// chain. Only the gap matters, so nothing is loaded when there isn't one.
+			const excusedDates =
+				streakLastDate && diffDays(todayStr, streakLastDate) > 1
+					? (
+							await db
+								.select({ date: excuseDays.date })
+								.from(excuseDays)
+								.where(
+									and(
+										eq(excuseDays.userId, u.id),
+										gt(excuseDays.date, streakLastDate),
+										lt(excuseDays.date, todayStr),
+									),
+								)
+						).map((r) => r.date)
+					: [];
+			const newStreak = nextStreak(
+				u.streak,
+				streakLastDate,
+				todayStr,
+				excusedDates,
+			);
 			await db
 				.update(userTable)
 				.set({

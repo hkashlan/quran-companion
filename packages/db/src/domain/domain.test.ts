@@ -7,6 +7,13 @@ import {
 	outstandingPageUnion,
 } from "./backlog.ts";
 import {
+	canExcuse,
+	DEFAULT_EXCUSE_DAYS_PER_MONTH,
+	excuseAllowance,
+	excuseBalance,
+	monthKey,
+} from "./excuse.ts";
+import {
 	addDaysStr,
 	catchupExpired,
 	distributePreview,
@@ -496,5 +503,92 @@ describe("plan-reset effectiveDailyAmount / catchupExpired", () => {
 				"2026-09-26",
 			),
 		).toBe(false);
+	});
+});
+
+// ── excuse days ──────────────────────────────────────────────────────────────
+
+describe("excuse monthKey / allowance / balance", () => {
+	it("buckets by calendar month", () => {
+		expect(monthKey("2026-09-11")).toBe("2026-09");
+		expect(monthKey("2026-01-01")).toBe("2026-01");
+	});
+
+	it("takes the most generous circle, treating null as the default", () => {
+		expect(excuseAllowance([null, 4, 2])).toBe(4);
+		expect(excuseAllowance([null, null])).toBe(DEFAULT_EXCUSE_DAYS_PER_MONTH);
+		// a student in no circle still gets the default
+		expect(excuseAllowance([])).toBe(DEFAULT_EXCUSE_DAYS_PER_MONTH);
+		// an explicit 0 is a real setting, not "inherit"
+		expect(excuseAllowance([0])).toBe(0);
+	});
+
+	it("never reports a negative remainder", () => {
+		expect(excuseBalance(2, 1)).toEqual({ allowed: 2, used: 1, remaining: 1 });
+		expect(excuseBalance(2, 5)).toEqual({ allowed: 2, used: 5, remaining: 0 });
+	});
+});
+
+describe("excuse canExcuse", () => {
+	const TODAY = "2026-09-11";
+
+	it("allows today and yesterday only", () => {
+		expect(canExcuse("2026-09-11", TODAY, 2)).toEqual({ ok: true });
+		expect(canExcuse("2026-09-10", TODAY, 2)).toEqual({ ok: true });
+		expect(canExcuse("2026-09-09", TODAY, 2)).toEqual({
+			ok: false,
+			reason: "too_old",
+		});
+		expect(canExcuse("2026-09-12", TODAY, 2)).toEqual({
+			ok: false,
+			reason: "future",
+		});
+	});
+
+	it("refuses once the month's balance is spent", () => {
+		expect(canExcuse(TODAY, TODAY, 0)).toEqual({
+			ok: false,
+			reason: "no_balance",
+		});
+	});
+
+	it("crosses a month boundary correctly", () => {
+		expect(canExcuse("2026-08-31", "2026-09-01", 2)).toEqual({ ok: true });
+	});
+});
+
+describe("scoring nextStreak with excused days", () => {
+	it("keeps the original behaviour when nothing is excused", () => {
+		expect(nextStreak(37, "2026-09-10", "2026-09-11")).toBe(38);
+		expect(nextStreak(37, "2026-09-08", "2026-09-11")).toBe(1);
+		expect(nextStreak(37, "2026-09-11", "2026-09-11")).toBe(37);
+	});
+
+	it("survives a gap in which every day was excused", () => {
+		// missed Thursday, excused it, resumed Friday
+		expect(nextStreak(37, "2026-09-09", "2026-09-11", ["2026-09-10"])).toBe(38);
+		// two excused days in a row
+		expect(
+			nextStreak(37, "2026-09-08", "2026-09-11", ["2026-09-09", "2026-09-10"]),
+		).toBe(38);
+	});
+
+	it("still breaks when one day in the gap was not excused", () => {
+		expect(nextStreak(37, "2026-09-08", "2026-09-11", ["2026-09-09"])).toBe(1);
+	});
+
+	it("ignores excused dates outside the gap", () => {
+		expect(nextStreak(37, "2026-09-08", "2026-09-11", ["2026-09-01"])).toBe(1);
+	});
+
+	it("advances by one across a gap, never by the number of excused days", () => {
+		expect(
+			nextStreak(37, "2026-09-06", "2026-09-11", [
+				"2026-09-07",
+				"2026-09-08",
+				"2026-09-09",
+				"2026-09-10",
+			]),
+		).toBe(38);
 	});
 });

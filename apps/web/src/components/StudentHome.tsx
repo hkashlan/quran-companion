@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { BacklogSection } from "@/components/BacklogList";
 import { DailyProgress } from "@/components/DailyProgress";
+import { ExcuseDayButton } from "@/components/ExcuseDayButton";
 import { PlanResetCard } from "@/components/PlanResetCard";
 import {
 	Button,
@@ -373,7 +374,8 @@ export function StudentHomeBody({
 							review={data.activeReview}
 							streak={data.user.streak}
 						/>
-						{data.activeReview.startPage != null ? (
+						{data.activeReview.status === "excused" ? null : data.activeReview
+								.startPage != null ? (
 							<PagesProgressEditor review={data.activeReview} />
 						) : (
 							<Button
@@ -387,6 +389,7 @@ export function StudentHomeBody({
 								{t("home.submit")}
 							</Button>
 						)}
+						<ExcuseDayButton date={data.activeReview.assignedDate} />
 					</Card>
 				) : (
 					<Card className="text-center text-[13px] text-text-secondary">

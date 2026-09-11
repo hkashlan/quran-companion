@@ -318,6 +318,9 @@ export async function runTeacherSummary(today: string, hour: number) {
 			const end = r.endPage ?? r.startPage ?? 0;
 			const finished =
 				r.status === "completed" ||
+				// Excused/waived days are settled — never push a reminder for them.
+				r.status === "excused" ||
+				r.status === "waived" ||
 				(r.progressPage != null && r.progressPage >= end);
 			// Only nag about students who are behind; finished ones are skipped.
 			if (finished) continue;

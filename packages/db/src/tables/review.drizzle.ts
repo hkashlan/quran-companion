@@ -21,6 +21,9 @@ export const reviewStatusEnum = pgEnum("review_status", [
 	// Forgiven by the student: dropped from the backlog without touching points or
 	// the "completed" count. Set by waiveReview and by a plan reset.
 	"waived",
+	// Covered by an excuse day: neither an achievement nor a miss. Kept out of the
+	// backlog, the on-time rate and the streak; the pages stay owed.
+	"excused",
 ]);
 
 export const reviews = pgTable(

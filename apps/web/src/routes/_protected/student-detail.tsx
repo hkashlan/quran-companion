@@ -26,7 +26,7 @@ function StudentDetail() {
 	const navigate = useNavigate();
 	const router = useRouter();
 	const { studentId } = Route.useSearch();
-	const { student, plan, reviews, sessions, resetEvents } =
+	const { student, plan, reviews, sessions, resetEvents, excuse } =
 		Route.useLoaderData();
 
 	if (!student)
@@ -105,6 +105,25 @@ function StudentDetail() {
 					</span>
 				)}
 			</Card>
+
+			{excuse.used > 0 ? (
+				<Card className="flex flex-col gap-1">
+					<span className="flex items-center justify-between text-[13px]">
+						<span className="font-bold text-text">
+							{t("detail.excuseUsage")}
+						</span>
+						<span className="text-text-secondary">
+							{t("detail.excuseUsed", {
+								used: String(excuse.used),
+								allowed: String(excuse.allowed),
+							})}
+						</span>
+					</span>
+					<span className="text-[11px] text-text-light">
+						{excuse.days.map((d) => d.date).join(" · ")}
+					</span>
+				</Card>
+			) : null}
 
 			{resetEvents.length > 0 ? (
 				<Card className="flex flex-col gap-2">

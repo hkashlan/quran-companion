@@ -17,6 +17,8 @@ export type CircleSummary = {
 	code: string;
 	memberRole: string;
 	studentsCount: number;
+	/** Monthly excuse-day allowance; null means the global default applies. */
+	excuseDaysPerMonth: number | null;
 };
 
 /** Circles the user belongs to, with their role and a student count. */
@@ -30,6 +32,7 @@ export async function listCirclesForUser(
 			description: learningCircles.description,
 			location: learningCircles.location,
 			code: learningCircles.code,
+			excuseDaysPerMonth: learningCircles.excuseDaysPerMonth,
 			memberRole: circleMemberships.role,
 		})
 		.from(circleMemberships)
