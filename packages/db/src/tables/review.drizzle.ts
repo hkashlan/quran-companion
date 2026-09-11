@@ -17,6 +17,9 @@ export const reviewStatusEnum = pgEnum("review_status", [
 	"pending",
 	"completed",
 	"missed",
+	// Forgiven by the student: dropped from the backlog without touching points or
+	// the "completed" count. Set by waiveReview and by a plan reset.
+	"waived",
 ]);
 
 export const reviews = pgTable(
@@ -48,6 +51,8 @@ export const reviews = pgTable(
 		completedAt: timestamp("completed_at"),
 		pointsEarned: integer("points_earned").default(0).notNull(),
 		status: reviewStatusEnum("status").default("pending").notNull(),
+		// When the student forgave this overdue day (status "waived").
+		waivedAt: timestamp("waived_at"),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [

@@ -1,7 +1,6 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import {
 	BookOpen,
-	ChevronLeft,
 	Clock,
 	LogOut,
 	MapPin,
@@ -9,6 +8,7 @@ import {
 	SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { BacklogSection } from "@/components/BacklogList";
 import { DailyProgress } from "@/components/DailyProgress";
 import {
 	Button,
@@ -397,36 +397,7 @@ export function StudentHomeBody({
 				</Link>
 			)}
 
-			{data.undoneReviews.length > 0 ? (
-				<Section title={t("home.pendingReviews")}>
-					<Card className="flex flex-col gap-2 p-3">
-						{data.undoneReviews.map((r) => (
-							<button
-								type="button"
-								key={r.id}
-								onClick={() =>
-									router.navigate({
-										to: "/submit-review",
-										search: { reviewId: r.id },
-									})
-								}
-								className="flex items-center justify-between gap-2 rounded-md px-1 py-1 text-[12px] active:bg-primary-light"
-							>
-								<span className="flex items-center gap-2">
-									<span
-										className={`h-2 w-2 rounded-full ${r.status === "missed" ? "bg-error" : "bg-text-light"}`}
-									/>
-									<span className="text-text">{reviewRange(r)}</span>
-								</span>
-								<span className="flex items-center gap-1 text-text-light">
-									{r.assignedDate}
-									<ChevronLeft size={13} />
-								</span>
-							</button>
-						))}
-					</Card>
-				</Section>
-			) : null}
+			<BacklogSection backlog={data.backlog} />
 
 			<ConfirmDialog
 				open={leavingId !== null}

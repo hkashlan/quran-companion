@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	backlogDebtPages,
+	backlogTone,
+	collapseBacklog,
+	outstandingPageUnion,
+} from "./backlog.ts";
+import {
 	advanceWithinPlan,
 	comparePositions,
 	isStartAdvance,
@@ -205,5 +211,148 @@ describe("review-cycle lastReachedPage", () => {
 
 	it("falls back to endPage for verses/legacy rows", () => {
 		expect(lastReachedPage(null, null, 50)).toBe(50);
+	});
+});
+
+// ── backlog ──────────────────────────────────────────────────────────────────
+
+/** Build an overdue row `daysLate` before `today`, on a fixed 100–139 window. */
+function overdue(
+	id: string,
+	daysLate: number,
+	extra: Partial<{
+		startPage: number;
+		endPage: number;
+		progressPage: number;
+	}> = {},
+) {
+	const d = new Date("2026-09-11T00:00:00Z");
+	d.setUTCDate(d.getUTCDate() - daysLate);
+	return {
+		id,
+		assignedDate: d.toISOString().slice(0, 10),
+		rangeMode: "pages",
+		startPage: 100,
+		endPage: 139,
+		progressPage: null as number | null,
+		status: "missed",
+		...extra,
+	};
+}
+
+const TODAY = "2026-09-11";
+
+describe("backlog backlogTone", () => {
+	it("bands at 1-2 / 3-6 / 7+ days", () => {
+		expect(backlogTone(1)).toBe("warn");
+		expect(backlogTone(2)).toBe("warn");
+		expect(backlogTone(3)).toBe("alert");
+		expect(backlogTone(6)).toBe("alert");
+		expect(backlogTone(7)).toBe("stale");
+		expect(backlogTone(30)).toBe("stale");
+	});
+});
+
+describe("backlog outstandingPageUnion", () => {
+	it("returns one window for repeated identical missed rows (not the sum)", () => {
+		const rows = [1, 2, 3, 4, 5].map((n) => overdue(`r${n}`, n));
+		expect(outstandingPageUnion(rows)).toBe(40);
+	});
+
+	it("subtracts progress already made on a row", () => {
+		expect(outstandingPageUnion([overdue("a", 1, { progressPage: 119 })])).toBe(
+			20,
+		);
+	});
+
+	it("drops rows already finished and merges distinct windows", () => {
+		expect(outstandingPageUnion([overdue("a", 1, { progressPage: 139 })])).toBe(
+			0,
+		);
+		expect(
+			outstandingPageUnion([
+				overdue("a", 2, { startPage: 100, endPage: 109 }),
+				overdue("b", 1, { startPage: 110, endPage: 119 }),
+			]),
+		).toBe(20);
+	});
+
+	it("ignores verse/legacy rows with no page window", () => {
+		expect(
+			outstandingPageUnion([
+				overdue("a", 1, { startPage: null, endPage: null } as never),
+			]),
+		).toBe(0);
+	});
+});
+
+describe("backlog backlogDebtPages", () => {
+	it("multiplies lost days by the daily amount", () => {
+		expect(backlogDebtPages(3, 40)).toBe(120);
+		expect(backlogDebtPages(0, 40)).toBe(0);
+	});
+});
+
+describe("backlog collapseBacklog", () => {
+	it("decorates newest-first and counts what sits behind the expander", () => {
+		const v = collapseBacklog(
+			[1, 2, 3, 4].map((n) => overdue(`r${n}`, n)),
+			TODAY,
+		);
+		expect(v.total).toBe(4);
+		expect(v.items.map((i) => i.id)).toEqual(["r1", "r2", "r3", "r4"]);
+		expect(v.items.map((i) => i.daysLate)).toEqual([1, 2, 3, 4]);
+		expect(v.items.map((i) => i.tone)).toEqual([
+			"warn",
+			"warn",
+			"alert",
+			"alert",
+		]);
+		expect(v.visible).toBe(3);
+		expect(v.hiddenCount).toBe(1);
+		expect(v.oldestDaysLate).toBe(4);
+		expect(v.suppressList).toBe(false);
+	});
+
+	it("suppresses the list past 7 items", () => {
+		const seven = collapseBacklog(
+			Array.from({ length: 7 }, (_, i) => overdue(`r${i}`, i + 1)),
+			TODAY,
+		);
+		expect(seven.suppressList).toBe(false);
+		expect(seven.items).toHaveLength(7);
+		expect(seven.hiddenCount).toBe(4);
+
+		const eight = collapseBacklog(
+			Array.from({ length: 8 }, (_, i) => overdue(`r${i}`, i + 1)),
+			TODAY,
+		);
+		expect(eight.suppressList).toBe(true);
+		expect(eight.items).toEqual([]);
+		expect(eight.hiddenCount).toBe(8);
+	});
+
+	it("offers the reset card only past the threshold", () => {
+		expect(
+			collapseBacklog([overdue("a", 1), overdue("b", 2)], TODAY).showResetCard,
+		).toBe(false);
+		expect(
+			collapseBacklog(
+				[overdue("a", 1), overdue("b", 2), overdue("c", 3)],
+				TODAY,
+			).showResetCard,
+		).toBe(true);
+	});
+
+	it("is empty and inert with no backlog", () => {
+		const v = collapseBacklog([], TODAY);
+		expect(v).toMatchObject({
+			total: 0,
+			items: [],
+			hiddenCount: 0,
+			oldestDaysLate: 0,
+			suppressList: false,
+			showResetCard: false,
+		});
 	});
 });

@@ -1,4 +1,8 @@
 import { db } from "@quran/db/db";
+import {
+	collapseBacklog,
+	outstandingPageUnion,
+} from "@quran/db/domain/backlog";
 import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
 import {
 	createCircle,
@@ -23,7 +27,7 @@ import { joinRequests } from "@quran/db/tables/join-request.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { circleMateDoneMessage } from "./notification-i18n.ts";
@@ -247,6 +251,10 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 			.from(reviews)
 			.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "completed")));
 
+		// "On time" means the full 10 points were awarded — i.e. completed on the
+		// day it was assigned. Testing `completedAt is not null` would be vacuous:
+		// the cron only ever promotes a stamped row to "completed", so that
+		// predicate made the rate a permanent 100%. Same rule as ReviewProgress.
 		const [{ onTime }] = await db
 			.select({ onTime: count() })
 			.from(reviews)
@@ -254,7 +262,7 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 				and(
 					eq(reviews.studentId, u.id),
 					eq(reviews.status, "completed"),
-					sql`${reviews.completedAt} is not null`,
+					eq(reviews.pointsEarned, 10),
 				),
 			);
 
@@ -315,6 +323,15 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 		}
 		if (!activeReview) activeReview = pending[0] ?? null;
 
+		// Outstanding work: older pending + missed reviews, minus today's active
+		// review and any pages review that already met its target (still editable
+		// on the active-review card).
+		const undone = [...pending, ...missed].filter(
+			(r) =>
+				r.id !== activeReview?.id &&
+				!(r.rangeMode === "pages" && r.completedAt != null),
+		);
+
 		return {
 			user: {
 				id: u.id,
@@ -327,14 +344,13 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 			pendingRequests,
 			hasPendingPlanChange: pendingPlanChange.length > 0,
 			activeReview,
-			// Outstanding work: older pending + missed reviews, minus today's active
-			// review and any pages review that already met its target (still editable
-			// on the active-review card above).
-			undoneReviews: [...pending, ...missed].filter(
-				(r) =>
-					r.id !== activeReview?.id &&
-					!(r.rangeMode === "pages" && r.completedAt != null),
-			),
+			// Collapsed view for the home screen: newest few, colour-graded by age,
+			// with the escalation flags. Pages are a *union* — a missed day re-issues
+			// its window, so the rows overlap and must never be summed.
+			backlog: {
+				...collapseBacklog(undone, todayStr),
+				pages: outstandingPageUnion(undone),
+			},
 			stats: {
 				points: u.points,
 				completed: completedCount,
@@ -1268,6 +1284,51 @@ export const getSubmitReviewData = createServerFn({ method: "GET" })
 			.where(and(eq(reviews.id, data.reviewId), eq(reviews.studentId, u.id)))
 			.limit(1);
 		return { review: review ?? null };
+	});
+
+/**
+ * Forgive one overdue review. Used for backlog rows old enough that completing
+ * them would *cost* points (`calculatePoints` goes negative past two days late) —
+ * the student should be able to clear them without a penalty.
+ *
+ * Deliberately leaves `pointsEarned` and the "completed" count untouched: this is
+ * an amnesty, not an achievement. Only reviews assigned before today can be
+ * waived, so a student can never waive away the work they owe today.
+ */
+export const waiveReview = createServerFn({ method: "POST" })
+	.validator(z.object({ reviewId: z.string().uuid() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const [review] = await db
+			.select()
+			.from(reviews)
+			.where(and(eq(reviews.id, data.reviewId), eq(reviews.studentId, u.id)))
+			.limit(1);
+		if (!review) return { ok: false as const, error: "not_found" as const };
+
+		const todayStr = today();
+		if (review.assignedDate >= todayStr)
+			return { ok: false as const, error: "not_overdue" as const };
+		if (review.status === "waived") return { ok: true as const };
+
+		await db
+			.update(reviews)
+			.set({ status: "waived", waivedAt: new Date() })
+			.where(eq(reviews.id, review.id));
+
+		// Waiving forgives the calendar day, not the pages: the cursor still sits
+		// where the student actually stopped, so later windows re-derive from the
+		// progress that stands (a no-op when the day had no progress at all).
+		if (review.reviewPlanId) {
+			const { recalcFutureReviews } = await import("./scheduler.ts");
+			await recalcFutureReviews(review.reviewPlanId, {
+				assignedDate: review.assignedDate,
+				progressPage: review.progressPage,
+				startPage: review.startPage,
+				endPage: review.endPage,
+			});
+		}
+		return { ok: true as const };
 	});
 
 /** Student: report page progress → completes + scores the review once the target is met. */
