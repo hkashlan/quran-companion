@@ -114,10 +114,17 @@ export function PlanResetCard({ anchorId }: { anchorId?: string }) {
 			<Section title={t("reset.title")}>
 				<Card className="flex flex-col gap-3">
 					<div className="flex flex-col gap-1">
+						{/*
+						 * The *schedule* debt, not the pages sitting in today's window.
+						 * A missed day re-issues its window, so the unread window stays
+						 * one day wide however long the gap — but the plan has still
+						 * slipped `daily × days` pages behind where it would have been,
+						 * and that is the number every strategy below actually costs out.
+						 */}
 						<span className="text-[15px] font-bold text-text">
 							{t("reset.backlog", {
 								days: String(data.backlog.days),
-								pages: String(data.backlog.pages),
+								pages: String(data.backlog.debtPages),
 							})}
 						</span>
 						<span className="text-[12px] text-text-secondary">

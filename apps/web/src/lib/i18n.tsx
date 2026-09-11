@@ -79,7 +79,7 @@ const messages: Record<Locale, Dict> = {
 		"backlog.resetCta": "أعد ضبط خطتك",
 		"backlog.resetCtaHint": "ابدأ من جديد بخطة تناسب وقتك بدل ملاحقة ما فات.",
 		"reset.title": "أعد ضبط خطتك",
-		"reset.backlog": "{days} يومًا متأخرًا — {pages} صفحة لم تُقرأ بعد",
+		"reset.backlog": "{days} أيام متأخرة — خطتك خلف الجدول بـ {pages} صفحة",
 		"reset.intro": "اختر مخرجًا واحدًا، وسترى أثره بالأرقام قبل التأكيد.",
 		"reset.distribute": "وزّع المتأخر",
 		"reset.extend": "مدّد الخطة",
@@ -377,7 +377,8 @@ const messages: Record<Locale, Dict> = {
 		"backlog.resetCtaHint":
 			"Start fresh with a plan that fits your time instead of chasing what you missed.",
 		"reset.title": "Reset your plan",
-		"reset.backlog": "{days} days behind — {pages} pages still unread",
+		"reset.backlog":
+			"{days} days missed — your plan is {pages} pages behind schedule",
 		"reset.intro":
 			"Pick one way out. You'll see what it does, in numbers, before confirming.",
 		"reset.distribute": "Spread it out",
@@ -681,7 +682,8 @@ const messages: Record<Locale, Dict> = {
 		"backlog.resetCtaHint":
 			"Fang mit einem Plan neu an, der zu deiner Zeit passt, statt Versäumtem hinterherzulaufen.",
 		"reset.title": "Plan neu einstellen",
-		"reset.backlog": "{days} Tage im Rückstand — {pages} Seiten noch ungelesen",
+		"reset.backlog":
+			"{days} Tage verpasst — dein Plan liegt {pages} Seiten hinter dem Zeitplan",
 		"reset.intro":
 			"Wähle einen Ausweg. Du siehst die Auswirkung in Zahlen, bevor du bestätigst.",
 		"reset.distribute": "Verteilen",
