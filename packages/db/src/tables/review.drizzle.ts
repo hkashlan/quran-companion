@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth.drizzle";
+import { planResetEvents } from "./plan-reset-event.drizzle";
 import { reviewPlans } from "./review-plan.drizzle";
 
 export const reviewStatusEnum = pgEnum("review_status", [
@@ -53,6 +54,9 @@ export const reviews = pgTable(
 		status: reviewStatusEnum("status").default("pending").notNull(),
 		// When the student forgave this overdue day (status "waived").
 		waivedAt: timestamp("waived_at"),
+		// Set when the row was waived in bulk by a plan reset (null for a
+		// one-off waive from the backlog list).
+		resetEventId: uuid("reset_event_id").references(() => planResetEvents.id),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [

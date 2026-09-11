@@ -71,6 +71,31 @@ const messages: Record<Locale, Dict> = {
 		"backlog.tooMany": "لديك {count} مراجعة متأخرة",
 		"backlog.resetCta": "أعد ضبط خطتك",
 		"backlog.resetCtaHint": "ابدأ من جديد بخطة تناسب وقتك بدل ملاحقة ما فات.",
+		"reset.title": "أعد ضبط خطتك",
+		"reset.backlog": "{days} يومًا متأخرًا — {pages} صفحة لم تُقرأ بعد",
+		"reset.intro": "اختر مخرجًا واحدًا، وسترى أثره بالأرقام قبل التأكيد.",
+		"reset.distribute": "وزّع المتأخر",
+		"reset.extend": "مدّد الخطة",
+		"reset.skip": "ابدأ من اليوم",
+		"reset.distributePreview":
+			"{daily} صفحة يوميًا لمدة {days} يومًا، ثم تعود إلى {base}",
+		"reset.extendPreview":
+			"يبقى وردك {daily}، ويتأخر ختمك من {before} إلى {after}",
+		"reset.skipPreview": "تبدأ اليوم من ص {page} — تُسجل {pages} صفحة كمتروكة",
+		"reset.catchupDays": "مدة الاستدراك",
+		"reset.daysUnit": "{days} يومًا",
+		"reset.confirm": "تأكيد",
+		"reset.done": "تم ضبط خطتك — ابدأ من ورد اليوم",
+		"reset.catchupReplaceWarning":
+			"لديك استدراك جارٍ — سيُستبدل بالجديد ولن يُضاف إليه.",
+		"reset.error.pendingPlanChange":
+			"لديك طلب تغيير خطة بانتظار معلّمك — انتظر رده أولًا.",
+		"reset.error.generic": "تعذّر ضبط الخطة، حاول مرة أخرى.",
+		"detail.resetEvents": "إعادة ضبط الخطة",
+		"detail.reset.distribute": "وزّع المتأخر",
+		"detail.reset.extend": "مدّد الخطة",
+		"detail.reset.skip": "بدأ من اليوم",
+		"detail.reset.backlog": "{days} يومًا متأخرًا",
 		"home.leave": "مغادرة",
 		"home.leaveConfirm": "هل تريد مغادرة هذه الحلقة؟",
 		"home.teacherView": "واجهة المعلم",
@@ -320,6 +345,33 @@ const messages: Record<Locale, Dict> = {
 		"backlog.resetCta": "Reset your plan",
 		"backlog.resetCtaHint":
 			"Start fresh with a plan that fits your time instead of chasing what you missed.",
+		"reset.title": "Reset your plan",
+		"reset.backlog": "{days} days behind — {pages} pages still unread",
+		"reset.intro":
+			"Pick one way out. You'll see what it does, in numbers, before confirming.",
+		"reset.distribute": "Spread it out",
+		"reset.extend": "Extend the plan",
+		"reset.skip": "Start from today",
+		"reset.distributePreview":
+			"{daily} pages a day for {days} days, then back to {base}",
+		"reset.extendPreview":
+			"Your daily {daily} stays; your khatmah moves from {before} to {after}",
+		"reset.skipPreview":
+			"You start today at p. {page} — {pages} pages recorded as skipped",
+		"reset.catchupDays": "Catch-up window",
+		"reset.daysUnit": "{days} days",
+		"reset.confirm": "Confirm",
+		"reset.done": "Plan reset — start with today's portion",
+		"reset.catchupReplaceWarning":
+			"A catch-up is already running — it will be replaced, not added to.",
+		"reset.error.pendingPlanChange":
+			"You have a plan change awaiting your teacher — wait for their answer first.",
+		"reset.error.generic": "Couldn't reset the plan, please try again.",
+		"detail.resetEvents": "Plan resets",
+		"detail.reset.distribute": "Spread out",
+		"detail.reset.extend": "Extended",
+		"detail.reset.skip": "Started from today",
+		"detail.reset.backlog": "{days} days behind",
 		"home.leave": "Leave",
 		"home.leaveConfirm": "Leave this circle?",
 		"home.teacherView": "Teacher view",
@@ -572,6 +624,34 @@ const messages: Record<Locale, Dict> = {
 		"backlog.resetCta": "Plan neu einstellen",
 		"backlog.resetCtaHint":
 			"Fang mit einem Plan neu an, der zu deiner Zeit passt, statt Versäumtem hinterherzulaufen.",
+		"reset.title": "Plan neu einstellen",
+		"reset.backlog": "{days} Tage im Rückstand — {pages} Seiten noch ungelesen",
+		"reset.intro":
+			"Wähle einen Ausweg. Du siehst die Auswirkung in Zahlen, bevor du bestätigst.",
+		"reset.distribute": "Verteilen",
+		"reset.extend": "Plan verlängern",
+		"reset.skip": "Heute neu beginnen",
+		"reset.distributePreview":
+			"{daily} Seiten täglich für {days} Tage, dann zurück auf {base}",
+		"reset.extendPreview":
+			"Dein Tagespensum {daily} bleibt; deine Khatma verschiebt sich von {before} auf {after}",
+		"reset.skipPreview":
+			"Du beginnst heute auf S. {page} — {pages} Seiten werden als übersprungen erfasst",
+		"reset.catchupDays": "Aufholzeitraum",
+		"reset.daysUnit": "{days} Tage",
+		"reset.confirm": "Bestätigen",
+		"reset.done": "Plan neu eingestellt — beginne mit dem heutigen Pensum",
+		"reset.catchupReplaceWarning":
+			"Es läuft bereits ein Aufholzeitraum — er wird ersetzt, nicht ergänzt.",
+		"reset.error.pendingPlanChange":
+			"Eine Planänderung wartet noch auf deine Lehrkraft — warte zuerst die Antwort ab.",
+		"reset.error.generic":
+			"Plan konnte nicht neu eingestellt werden, bitte erneut versuchen.",
+		"detail.resetEvents": "Plan-Neueinstellungen",
+		"detail.reset.distribute": "Verteilt",
+		"detail.reset.extend": "Verlängert",
+		"detail.reset.skip": "Neu begonnen",
+		"detail.reset.backlog": "{days} Tage im Rückstand",
 		"home.leave": "Verlassen",
 		"home.leaveConfirm": "Diesen Kreis verlassen?",
 		"home.teacherView": "Lehreransicht",

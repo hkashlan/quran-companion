@@ -7,6 +7,17 @@ import {
 	outstandingPageUnion,
 } from "./backlog.ts";
 import {
+	addDaysStr,
+	catchupExpired,
+	distributePreview,
+	effectiveDailyAmount,
+	estimatedKhatmah,
+	extendPreview,
+	idealCursor,
+	remainingPages,
+	skipPreview,
+} from "./plan-reset.ts";
+import {
 	advanceWithinPlan,
 	comparePositions,
 	isStartAdvance,
@@ -354,5 +365,136 @@ describe("backlog collapseBacklog", () => {
 			suppressList: false,
 			showResetCard: false,
 		});
+	});
+});
+
+// ── plan-reset ───────────────────────────────────────────────────────────────
+
+/** Student on 40 pages/day, stuck at page 461, three days missed. */
+const RESET = {
+	today: "2026-09-11",
+	dailyAmount: 40,
+	planStartPage: 1,
+	planEndPage: 604,
+	cursorPage: 461,
+	overdueDays: 3,
+};
+
+describe("plan-reset addDaysStr / estimatedKhatmah", () => {
+	it("shifts dates across a month boundary", () => {
+		expect(addDaysStr("2026-09-11", 20)).toBe("2026-10-01");
+		expect(addDaysStr("2026-09-11", -11)).toBe("2026-08-31");
+		expect(addDaysStr("2026-09-11", 0)).toBe("2026-09-11");
+	});
+
+	it("counts today as the first reading day", () => {
+		// 40 pages at 40/day finishes today, not tomorrow.
+		expect(estimatedKhatmah("2026-09-11", 40, 40)).toBe("2026-09-11");
+		expect(estimatedKhatmah("2026-09-11", 41, 40)).toBe("2026-09-12");
+		expect(estimatedKhatmah("2026-09-11", 0, 40)).toBe("2026-09-11");
+	});
+});
+
+describe("plan-reset idealCursor", () => {
+	it("advances by the debt the missed days represent", () => {
+		expect(idealCursor(RESET)).toBe(461 + 120);
+	});
+
+	it("clamps one past the plan end rather than wrapping", () => {
+		expect(idealCursor({ ...RESET, cursorPage: 600, overdueDays: 10 })).toBe(
+			605,
+		);
+		expect(remainingPages(605, 604)).toBe(0);
+	});
+});
+
+describe("plan-reset distributePreview", () => {
+	it("spreads a 120-page debt over 15 days as +8/day", () => {
+		const p = distributePreview(RESET, 15);
+		expect(p.extraPerDay).toBe(8);
+		expect(p.dailyDuringCatchup).toBe(48);
+		expect(p.baseDaily).toBe(40);
+		expect(p.catchupUntil).toBe("2026-09-25");
+	});
+
+	it("rounds the extra up so the debt is fully covered", () => {
+		// 120 over 7 days → 17.14 → 18/day (7×18 = 126 ≥ 120)
+		const p = distributePreview(RESET, 7);
+		expect(p.extraPerDay).toBe(18);
+		expect(p.catchupDays * p.extraPerDay).toBeGreaterThanOrEqual(120);
+	});
+
+	it("recovers the promised khatmah date", () => {
+		const p = distributePreview(RESET, 15);
+		// 144 pages left from 461; ideal position would leave 24 → both finish soon,
+		// and catching up never finishes later than simply extending.
+		expect(p.khatmahAfter <= extendPreview(RESET).khatmahAfter).toBe(true);
+	});
+
+	it("handles a catch-up window longer than the pages remaining", () => {
+		const p = distributePreview({ ...RESET, cursorPage: 600 }, 30);
+		// only 5 pages left → finishes today, not in 30 days
+		expect(p.khatmahAfter).toBe("2026-09-11");
+	});
+});
+
+describe("plan-reset extendPreview", () => {
+	it("slips the khatmah by exactly the days lost", () => {
+		const p = extendPreview(RESET);
+		expect(p.dailyAmount).toBe(40);
+		expect(p.delayDays).toBe(3);
+		expect(p.khatmahBefore < p.khatmahAfter).toBe(true);
+	});
+});
+
+describe("plan-reset skipPreview", () => {
+	it("jumps the cursor forward and writes off the pages in between", () => {
+		const p = skipPreview(RESET);
+		expect(p.newStartPage).toBe(581);
+		expect(p.skippedFrom).toBe(461);
+		expect(p.skippedTo).toBe(580);
+		expect(p.skippedPages).toBe(120);
+		// the whole point: the promised finish date is restored
+		expect(p.khatmahAfter).toBe(p.khatmahBefore);
+	});
+
+	it("clamps at the plan end instead of wrapping into a new khatmah", () => {
+		const p = skipPreview({ ...RESET, cursorPage: 600, overdueDays: 10 });
+		expect(p.newStartPage).toBe(604);
+		expect(p.skippedPages).toBe(5);
+	});
+});
+
+describe("plan-reset effectiveDailyAmount / catchupExpired", () => {
+	const plan = {
+		dailyAmount: 40,
+		catchupExtraPages: 8,
+		catchupUntil: "2026-09-25",
+	};
+
+	it("adds the extra only while the window is open, inclusive of its last day", () => {
+		expect(effectiveDailyAmount(plan, "2026-09-11")).toBe(48);
+		expect(effectiveDailyAmount(plan, "2026-09-25")).toBe(48);
+		expect(effectiveDailyAmount(plan, "2026-09-26")).toBe(40);
+	});
+
+	it("falls back to the base amount when no catch-up is set", () => {
+		expect(
+			effectiveDailyAmount(
+				{ dailyAmount: 40, catchupExtraPages: null, catchupUntil: null },
+				"2026-09-11",
+			),
+		).toBe(40);
+	});
+
+	it("expires only after the last catch-up day", () => {
+		expect(catchupExpired(plan, "2026-09-25")).toBe(false);
+		expect(catchupExpired(plan, "2026-09-26")).toBe(true);
+		expect(
+			catchupExpired(
+				{ dailyAmount: 40, catchupExtraPages: null, catchupUntil: null },
+				"2026-09-26",
+			),
+		).toBe(false);
 	});
 });

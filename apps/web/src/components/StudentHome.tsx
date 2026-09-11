@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { BacklogSection } from "@/components/BacklogList";
 import { DailyProgress } from "@/components/DailyProgress";
+import { PlanResetCard } from "@/components/PlanResetCard";
 import {
 	Button,
 	Card,
@@ -28,6 +29,9 @@ import {
 } from "@/server/queries";
 
 export type StudentHomeData = Awaited<ReturnType<typeof getStudentHome>>;
+
+/** Scroll target shared by the backlog "reset your plan" CTA and the card. */
+const RESET_ANCHOR = "plan-reset-card";
 
 type EditableReview = {
 	id: string;
@@ -355,6 +359,10 @@ export function StudentHomeBody({
 
 			<PendingRequestsSection requests={data.pendingRequests} />
 
+			{data.backlog.showResetCard ? (
+				<PlanResetCard anchorId={RESET_ANCHOR} />
+			) : null}
+
 			<Section title={t("home.activeReview")}>
 				{data.activeReview ? (
 					<Card className="flex flex-col gap-3">
@@ -397,7 +405,17 @@ export function StudentHomeBody({
 				</Link>
 			)}
 
-			<BacklogSection backlog={data.backlog} />
+			<BacklogSection
+				backlog={data.backlog}
+				onReset={
+					data.backlog.showResetCard
+						? () =>
+								document
+									.getElementById(RESET_ANCHOR)
+									?.scrollIntoView({ behavior: "smooth", block: "start" })
+						: undefined
+				}
+			/>
 
 			<ConfirmDialog
 				open={leavingId !== null}
