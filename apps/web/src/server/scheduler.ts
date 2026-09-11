@@ -18,6 +18,8 @@ import { sendPush } from "./push.ts";
  * Daily scheduler pipeline — the TypeScript replacement for the Python
  * `notification_scheduler` + `procrastinate` worker. Invoked by /api/cron/daily.
  *
+ * It also purges notification deliveries older than the retention window.
+ *
  * For each active review plan:
  *   1. mark the student's overdue pending reviews for that plan as "missed"
  *   2. if no review exists for today, create the next one from the plan
@@ -26,6 +28,15 @@ import { sendPush } from "./push.ts";
  *
  * Returns a summary for the cron response/logs.
  */
+
+/**
+ * How long a notification delivery is kept. The list is a feed, not an archive:
+ * nothing in the app reads a delivery older than this, and the rows only exist
+ * to back the bell screen and to dedupe re-sends. Every dedupe key that could
+ * still be re-issued is scoped to a date or to a one-off row id, so dropping old
+ * rows can never resurrect a notification the user already saw.
+ */
+export const NOTIFICATION_RETENTION_DAYS = 7;
 export type PlanForReview = {
 	id: string;
 	studentId: string;
@@ -212,6 +223,13 @@ export async function recalcFutureReviews(
 }
 
 export async function runDailyScheduler(today: string) {
+	const cutoff = new Date(`${today}T00:00:00Z`);
+	cutoff.setUTCDate(cutoff.getUTCDate() - NOTIFICATION_RETENTION_DAYS);
+	const purged = await db
+		.delete(notificationDeliveries)
+		.where(lt(notificationDeliveries.createdAt, cutoff))
+		.returning({ id: notificationDeliveries.id });
+
 	const plans = await db
 		.select({
 			id: reviewPlans.id,
@@ -267,7 +285,13 @@ export async function runDailyScheduler(today: string) {
 		}
 	}
 
-	return { plans: plans.length, created, missed, notified };
+	return {
+		plans: plans.length,
+		created,
+		missed,
+		notified,
+		purged: purged.length,
+	};
 }
 
 /**
