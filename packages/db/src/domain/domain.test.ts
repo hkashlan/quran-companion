@@ -373,6 +373,84 @@ describe("backlog collapseBacklog", () => {
 			showResetCard: false,
 		});
 	});
+
+	it("has no group summary with no backlog", () => {
+		expect(collapseBacklog([], TODAY).summary).toBeNull();
+	});
+});
+
+describe("backlog group summary", () => {
+	it("folds identical re-issued windows into one range, not a sum", () => {
+		const s = collapseBacklog(
+			[1, 2, 3, 4].map((n) => overdue(`r${n}`, n)),
+			TODAY,
+		).summary;
+		if (!s) throw new Error("expected a summary");
+		expect(s.days).toBe(4);
+		expect(s.pages).toBe(40);
+		expect(s.fromPage).toBe(100);
+		expect(s.toPage).toBe(139);
+		// The newest row is the one a real catch-up completes; the rest get waived.
+		expect(s.newestId).toBe("r1");
+		expect(s.ids).toEqual(["r1", "r2", "r3", "r4"]);
+	});
+
+	it("takes its tone from the oldest day but its scoring from the newest", () => {
+		const s = collapseBacklog(
+			[overdue("new", 1), overdue("old", 6)],
+			TODAY,
+		).summary;
+		if (!s) throw new Error("expected a summary");
+		expect(s.daysLate).toBe(6);
+		expect(s.tone).toBe("alert");
+		expect(s.newestDaysLate).toBe(1);
+		// Completing the newest row still pays, so the offer stands even though the
+		// backlog as a whole is old.
+		expect(s.canComplete).toBe(true);
+		expect(s.oldestDate).toBe("2026-09-05");
+		expect(s.newestDate).toBe("2026-09-10");
+	});
+
+	it("withdraws the complete offer once even the newest row scores negative", () => {
+		const s = collapseBacklog(
+			[overdue("a", 3), overdue("b", 5)],
+			TODAY,
+		).summary;
+		if (!s) throw new Error("expected a summary");
+		expect(s.newestDaysLate).toBe(3);
+		expect(s.canComplete).toBe(false);
+	});
+
+	it("narrows the range to what partial progress still leaves owed", () => {
+		const s = collapseBacklog(
+			[overdue("a", 1, { progressPage: 119 })],
+			TODAY,
+		).summary;
+		if (!s) throw new Error("expected a summary");
+		expect(s.fromPage).toBe(120);
+		expect(s.toPage).toBe(139);
+		expect(s.pages).toBe(20);
+	});
+
+	it("survives verse-mode rows with no page window", () => {
+		const s = collapseBacklog(
+			[overdue("a", 1, { startPage: null, endPage: null } as never)],
+			TODAY,
+		).summary;
+		if (!s) throw new Error("expected a summary");
+		expect(s.fromPage).toBeNull();
+		expect(s.toPage).toBeNull();
+		expect(s.pages).toBe(0);
+	});
+
+	it("still summarises when the list itself is suppressed", () => {
+		const v = collapseBacklog(
+			Array.from({ length: 8 }, (_, i) => overdue(`r${i}`, i + 1)),
+			TODAY,
+		);
+		expect(v.items).toEqual([]);
+		expect(v.summary?.ids).toHaveLength(8);
+	});
 });
 
 // ── plan-reset ───────────────────────────────────────────────────────────────

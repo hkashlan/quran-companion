@@ -62,8 +62,15 @@ const messages: Record<Locale, Dict> = {
 		"home.pendingReviews": "مراجعات متأخرة",
 		"backlog.title": "مراجعات متأخرة",
 		"backlog.daysLate": "متأخرة {days} يومًا",
-		"backlog.showMore": "عرض {count} أخرى",
 		"backlog.showLess": "إخفاء",
+		"backlog.showDays": "عرض الأيام ({count})",
+		"backlog.waiveAll": "طيّها كلها",
+		"backlog.groupHint":
+			"{days} أيام متأخرة تغطي النطاق نفسه — أجب عنها مرة واحدة.",
+		"backlog.groupDoneConfirm":
+			"تُحتسب {range} ليوم {date}، وتُطوى الأيام المتأخرة الأخرى ({rest}) بلا خصم نقاط.",
+		"backlog.groupWaiveConfirm":
+			"تُطوى {days} أيام متأخرة ({range}) — لا تُخصم نقاط.",
 		"backlog.markDone": "أنجزتها",
 		"backlog.markDoneConfirm": "هل أنجزت {range} ليوم {date}؟",
 		"backlog.waive": "طيّها",
@@ -351,8 +358,15 @@ const messages: Record<Locale, Dict> = {
 		"home.pendingReviews": "Pending Reviews",
 		"backlog.title": "Overdue reviews",
 		"backlog.daysLate": "{days} days late",
-		"backlog.showMore": "Show {count} more",
 		"backlog.showLess": "Show less",
+		"backlog.showDays": "Show the {count} days",
+		"backlog.waiveAll": "Let them all go",
+		"backlog.groupHint":
+			"{days} overdue days covering the same range — answer them once.",
+		"backlog.groupDoneConfirm":
+			"{range} is scored for {date}, and the other {rest} overdue days are cleared with no penalty.",
+		"backlog.groupWaiveConfirm":
+			"{days} overdue days ({range}) are cleared — no points are deducted.",
 		"backlog.markDone": "I did it",
 		"backlog.markDoneConfirm": "Did you complete {range} for {date}?",
 		"backlog.waive": "Let it go",
@@ -648,8 +662,15 @@ const messages: Record<Locale, Dict> = {
 		"home.pendingReviews": "Ausstehende Wiederholungen",
 		"backlog.title": "Überfällige Wiederholungen",
 		"backlog.daysLate": "{days} Tage überfällig",
-		"backlog.showMore": "{count} weitere anzeigen",
 		"backlog.showLess": "Weniger anzeigen",
+		"backlog.showDays": "Die {count} Tage anzeigen",
+		"backlog.waiveAll": "Alle streichen",
+		"backlog.groupHint":
+			"{days} überfällige Tage mit demselben Bereich — einmal beantworten.",
+		"backlog.groupDoneConfirm":
+			"{range} wird für {date} gewertet, die übrigen {rest} überfälligen Tage werden ohne Abzug gestrichen.",
+		"backlog.groupWaiveConfirm":
+			"{days} überfällige Tage ({range}) werden gestrichen — keine Punkte werden abgezogen.",
 		"backlog.markDone": "Erledigt",
 		"backlog.markDoneConfirm": "Hast du {range} für {date} abgeschlossen?",
 		"backlog.waive": "Streichen",

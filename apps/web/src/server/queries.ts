@@ -1326,48 +1326,69 @@ export const getSubmitReviewData = createServerFn({ method: "GET" })
 	});
 
 /**
- * Forgive one overdue review. Used for backlog rows old enough that completing
- * them would *cost* points (`calculatePoints` goes negative past two days late) —
- * the student should be able to clear them without a penalty.
+ * Forgive overdue reviews. Used for backlog rows old enough that completing them
+ * would *cost* points (`calculatePoints` goes negative past two days late) — the
+ * student should be able to clear them without a penalty.
+ *
+ * Takes a list rather than a single id because a backlog is answered as a group:
+ * every missed day re-issues the same page window, so "let it go" is one decision
+ * about one range, not N decisions about N identical-looking rows.
  *
  * Deliberately leaves `pointsEarned` and the "completed" count untouched: this is
  * an amnesty, not an achievement. Only reviews assigned before today can be
  * waived, so a student can never waive away the work they owe today.
  */
 export const waiveReview = createServerFn({ method: "POST" })
-	.validator(z.object({ reviewId: z.string().uuid() }))
+	.validator(
+		z.object({ reviewIds: z.array(z.string().uuid()).min(1).max(200) }),
+	)
 	.handler(async ({ data }) => {
 		const u = await requireUser();
-		const [review] = await db
+		const todayStr = today();
+		const rows = await db
 			.select()
 			.from(reviews)
-			.where(and(eq(reviews.id, data.reviewId), eq(reviews.studentId, u.id)))
-			.limit(1);
-		if (!review) return { ok: false as const, error: "not_found" as const };
+			.where(
+				and(
+					inArray(reviews.id, data.reviewIds),
+					eq(reviews.studentId, u.id),
+					lt(reviews.assignedDate, todayStr),
+				),
+			);
+		if (rows.length === 0)
+			return { ok: false as const, error: "not_found" as const };
 
-		const todayStr = today();
-		if (review.assignedDate >= todayStr)
-			return { ok: false as const, error: "not_overdue" as const };
-		if (review.status === "waived") return { ok: true as const };
+		const pending = rows.filter((r) => r.status !== "waived");
+		if (pending.length > 0) {
+			await db
+				.update(reviews)
+				.set({ status: "waived", waivedAt: new Date() })
+				.where(
+					inArray(
+						reviews.id,
+						pending.map((r) => r.id),
+					),
+				);
+		}
 
-		await db
-			.update(reviews)
-			.set({ status: "waived", waivedAt: new Date() })
-			.where(eq(reviews.id, review.id));
-
-		// Waiving forgives the calendar day, not the pages: the cursor still sits
+		// Waiving forgives the calendar days, not the pages: the cursor still sits
 		// where the student actually stopped, so later windows re-derive from the
-		// progress that stands (a no-op when the day had no progress at all).
-		if (review.reviewPlanId) {
+		// progress that stands (a no-op when the days had no progress at all).
+		// Re-anchor from the *oldest* row, since recalcFutureReviews only touches
+		// what comes after the row it is given.
+		const oldest = rows.reduce((a, b) =>
+			a.assignedDate <= b.assignedDate ? a : b,
+		);
+		if (oldest.reviewPlanId) {
 			const { recalcFutureReviews } = await import("./scheduler.ts");
-			await recalcFutureReviews(review.reviewPlanId, {
-				assignedDate: review.assignedDate,
-				progressPage: review.progressPage,
-				startPage: review.startPage,
-				endPage: review.endPage,
+			await recalcFutureReviews(oldest.reviewPlanId, {
+				assignedDate: oldest.assignedDate,
+				progressPage: oldest.progressPage,
+				startPage: oldest.startPage,
+				endPage: oldest.endPage,
 			});
 		}
-		return { ok: true as const };
+		return { ok: true as const, waived: pending.length };
 	});
 
 /**

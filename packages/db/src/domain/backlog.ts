@@ -16,6 +16,11 @@ export const BACKLOG_VISIBLE = 3;
 export const BACKLOG_COLLAPSE_ALL = 7;
 /** Past this many overdue items the "reset your plan" card is offered. */
 export const RESET_THRESHOLD_DAYS = 2;
+/**
+ * Past this many days late, `calculatePoints` turns negative — so "I did it"
+ * stops being an offer and becomes a punishment. Beyond it only waiving is sane.
+ */
+export const COMPLETE_MAX_DAYS_LATE = 2;
 
 /** Age bands: 1–2 days, 3–6 days, 7+ days. */
 export type BacklogTone = "warn" | "alert" | "stale";
@@ -33,6 +38,44 @@ export type OverdueRow = {
 export type BacklogItem = OverdueRow & {
 	daysLate: number;
 	tone: BacklogTone;
+};
+
+/**
+ * The whole backlog as one thing to act on.
+ *
+ * Every outstanding row carries (roughly) the same page window — see the module
+ * header — so listing them day by day shows the student the same sentence four
+ * times and invites four separate answers to one question. Worse, completing one
+ * row leaves the older ones behind still advertising pages that were just read,
+ * because `recalcFutureReviews` only re-anchors rows *after* the one it was given.
+ * The group is therefore the honest unit: one range, one age, one decision.
+ */
+export type BacklogSummary = {
+	/** The newest outstanding row: the one a real catch-up actually completes. */
+	newestId: string;
+	/** Every outstanding row, newest first — what a group action covers. */
+	ids: string[];
+	/** How many calendar days were lost. */
+	days: number;
+	/** Age of the oldest row; drives the tone, since that is the real debt. */
+	daysLate: number;
+	/** Age of the newest row; drives whether completing it still scores. */
+	newestDaysLate: number;
+	tone: BacklogTone;
+	oldestDate: string;
+	newestDate: string;
+	/** Union span of pages still owed; null in verse mode. */
+	fromPage: number | null;
+	toPage: number | null;
+	/** Pages in that union — 40 for five identical 40-page rows, never 200. */
+	pages: number;
+	rangeMode: string;
+	/**
+	 * Whether "I did it" is still worth offering. Completing the newest row awards
+	 * its own (possibly reduced) points; past `COMPLETE_MAX_DAYS_LATE` that number
+	 * is negative, so the only non-punitive exit left is to waive.
+	 */
+	canComplete: boolean;
 };
 
 export type BacklogView = {
@@ -55,6 +98,8 @@ export type BacklogView = {
 	suppressList: boolean;
 	/** Enough backlog to offer the plan-reset card (consumed by the reset card). */
 	showResetCard: boolean;
+	/** The backlog as a single actionable unit; null when there is no backlog. */
+	summary: BacklogSummary | null;
 };
 
 export function backlogTone(daysLate: number): BacklogTone {
@@ -69,7 +114,20 @@ export function backlogTone(daysLate: number): BacklogTone {
  * 40 pages are 40 outstanding pages, not 200.
  */
 export function outstandingPageUnion(rows: OverdueRow[]): number {
-	const spans = rows
+	let total = 0;
+	let cursor = -1;
+	for (const s of outstandingSpans(rows)) {
+		const from = Math.max(s.from, cursor + 1);
+		if (from > s.to) continue;
+		total += s.to - from + 1;
+		cursor = s.to;
+	}
+	return total;
+}
+
+/** The page windows the rows still owe, ascending. Verse-mode rows contribute none. */
+function outstandingSpans(rows: OverdueRow[]): { from: number; to: number }[] {
+	return rows
 		.map((r) => {
 			if (r.startPage == null || r.endPage == null) return null;
 			// Progress already made on a row shrinks what it still owes.
@@ -81,16 +139,6 @@ export function outstandingPageUnion(rows: OverdueRow[]): number {
 		})
 		.filter((s): s is { from: number; to: number } => s !== null)
 		.sort((a, b) => a.from - b.from);
-
-	let total = 0;
-	let cursor = -1;
-	for (const s of spans) {
-		const from = Math.max(s.from, cursor + 1);
-		if (from > s.to) continue;
-		total += s.to - from + 1;
-		cursor = s.to;
-	}
-	return total;
 }
 
 /** Schedule debt: what the missed calendar days cost in pages of plan progress. */
@@ -135,6 +183,29 @@ export function collapseBacklog(
 				return { ...r, daysLate, tone: backlogTone(daysLate) };
 			});
 
+	let summary: BacklogSummary | null = null;
+	if (total > 0) {
+		const newest = sorted[0];
+		const oldest = sorted[total - 1];
+		const newestDaysLate = Math.max(0, diffDays(today, newest.assignedDate));
+		const spans = outstandingSpans(sorted);
+		summary = {
+			newestId: newest.id,
+			ids: sorted.map((r) => r.id),
+			days: total,
+			daysLate: oldestDaysLate,
+			newestDaysLate,
+			tone: backlogTone(oldestDaysLate),
+			oldestDate: oldest.assignedDate,
+			newestDate: newest.assignedDate,
+			fromPage: spans.length > 0 ? spans[0].from : null,
+			toPage: spans.length > 0 ? Math.max(...spans.map((sp) => sp.to)) : null,
+			pages: outstandingPageUnion(sorted),
+			rangeMode: newest.rangeMode,
+			canComplete: newestDaysLate <= COMPLETE_MAX_DAYS_LATE,
+		};
+	}
+
 	return {
 		total,
 		items,
@@ -143,5 +214,6 @@ export function collapseBacklog(
 		oldestDaysLate,
 		suppressList,
 		showResetCard: total > resetThreshold,
+		summary,
 	};
 }

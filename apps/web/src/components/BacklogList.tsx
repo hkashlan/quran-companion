@@ -17,17 +17,24 @@ const TONE_BORDER: Record<Item["tone"], string> = {
 	stale: "border-text-light",
 };
 
-type PendingAction = { item: Item; kind: "done" | "waive" };
+type PendingAction = "done" | "waive";
 
 /**
- * The overdue-reviews list, collapsed and colour-graded by age.
+ * The backlog, presented as one thing to answer rather than a row per missed day.
  *
- * Two direct actions rather than one, because the points curve makes a single
- * action wrong at one end: `calculatePoints` awards 10/5 for 0–1 days late but
- * goes *negative* from three days on. So a fresh row offers "I did it" (a real,
- * scored catch-up) while an older one offers "let it go" (an amnesty that leaves
- * points and the completed count alone). Past `BACKLOG_COLLAPSE_ALL` rows the
- * list stops being useful at all and is replaced by the plan-reset invitation.
+ * A missed day re-issues its own page window, so a day-by-day list repeats the
+ * identical sentence N times and asks the student to answer it N times — and
+ * answering one leaves the others behind still advertising pages that were just
+ * read, because `recalcFutureReviews` only re-anchors rows *after* the one it was
+ * given. The group is the honest unit: one range, one age, one decision.
+ *
+ * Two exits rather than one, because the points curve makes a single action wrong
+ * at one end: `calculatePoints` awards 10/5 for 0–1 days late but goes *negative*
+ * from three days on. So "I did it" scores the newest row and waives the rest (one
+ * reading earns points once), and is offered only while that row still pays;
+ * "let it all go" is the amnesty that leaves points and the completed count alone.
+ * Past `BACKLOG_COLLAPSE_ALL` days the list stops being useful at all and is
+ * replaced by the plan-reset invitation.
  */
 export function BacklogSection({
 	backlog,
@@ -42,7 +49,8 @@ export function BacklogSection({
 	const [pending, setPending] = useState<PendingAction | null>(null);
 	const [busy, setBusy] = useState(false);
 
-	if (backlog.total === 0) return null;
+	const summary = backlog.summary;
+	if (backlog.total === 0 || !summary) return null;
 
 	if (backlog.suppressList) {
 		const cta = (
@@ -69,20 +77,36 @@ export function BacklogSection({
 		return <Section title={t("backlog.title")}>{cta}</Section>;
 	}
 
+	const newest = backlog.items.find((i) => i.id === summary.newestId);
+	const olderIds = summary.ids.filter((id) => id !== summary.newestId);
+	// The union span, which excludes pages already covered by partial progress,
+	// describes what is actually still owed better than any single row's window.
+	const range = newest
+		? reviewRange({
+				...newest,
+				startPage: summary.fromPage ?? newest.startPage,
+				endPage: summary.toPage ?? newest.endPage,
+			})
+		: "";
+
 	const confirm = async () => {
-		if (!pending) return;
 		setBusy(true);
 		try {
-			if (pending.kind === "done") {
-				await submitReview({
+			// Waive the older days first, then score the newest: the completion runs
+			// last so the cursor everything re-derives from is the one it just set.
+			if (pending === "waive" || olderIds.length > 0)
+				await waiveReview({
 					data: {
-						reviewId: pending.item.id,
-						currentPage: pending.item.endPage ?? undefined,
+						reviewIds: pending === "waive" ? summary.ids : olderIds,
 					},
 				});
-			} else {
-				await waiveReview({ data: { reviewId: pending.item.id } });
-			}
+			if (pending === "done" && newest)
+				await submitReview({
+					data: {
+						reviewId: newest.id,
+						currentPage: summary.toPage ?? newest.endPage ?? undefined,
+					},
+				});
 			setPending(null);
 			router.invalidate();
 		} finally {
@@ -90,61 +114,55 @@ export function BacklogSection({
 		}
 	};
 
-	const rows = expanded
-		? backlog.items
-		: backlog.items.slice(0, backlog.visible);
-	const message = pending
-		? t(
-				pending.kind === "done"
-					? "backlog.markDoneConfirm"
-					: "backlog.waiveConfirm",
-				{
-					range: reviewRange(pending.item),
-					date: pending.item.assignedDate,
-				},
-			)
-		: "";
+	const message =
+		pending === "waive"
+			? t("backlog.groupWaiveConfirm", {
+					days: String(summary.days),
+					range,
+				})
+			: olderIds.length > 0
+				? t("backlog.groupDoneConfirm", {
+						range,
+						date: summary.newestDate,
+						rest: String(olderIds.length),
+					})
+				: t("backlog.markDoneConfirm", { range, date: summary.newestDate });
 
 	return (
 		<Section title={t("backlog.title")}>
-			<Card className="flex flex-col gap-2 p-3">
-				{rows.map((r) => (
-					<div
-						key={r.id}
-						className={`flex flex-col gap-2 rounded-md border-r-4 bg-background/40 px-2 py-2 ${TONE_BORDER[r.tone]}`}
-					>
-						<button
-							type="button"
-							onClick={() =>
-								router.navigate({
-									to: "/submit-review",
-									search: { reviewId: r.id },
-								})
-							}
-							className="flex items-center justify-between gap-2 text-[12px] active:opacity-70"
-						>
-							<span className="text-text">{reviewRange(r)}</span>
-							<span className="flex items-center gap-1 text-text-light">
-								{t("backlog.daysLate", { days: String(r.daysLate) })}
-								<ChevronLeft size={13} />
-							</span>
-						</button>
-						<Button
-							variant="outline"
-							className="h-9 text-[13px]"
-							onClick={() =>
-								setPending({
-									item: r,
-									kind: r.tone === "warn" ? "done" : "waive",
-								})
-							}
-						>
-							{t(r.tone === "warn" ? "backlog.markDone" : "backlog.waive")}
-						</Button>
-					</div>
-				))}
+			<Card className="flex flex-col gap-3">
+				<div
+					className={`flex flex-col gap-1 rounded-md border-r-4 bg-background/40 px-3 py-2 ${TONE_BORDER[summary.tone]}`}
+				>
+					<span className="flex items-center justify-between gap-2 text-[13px]">
+						<span className="font-semibold text-text">{range}</span>
+						<span className="shrink-0 text-text-light">
+							{t("backlog.daysLate", { days: String(summary.daysLate) })}
+						</span>
+					</span>
+					<span className="text-[11px] text-text-secondary">
+						{t("backlog.groupHint", { days: String(summary.days) })}
+					</span>
+				</div>
 
-				{backlog.hiddenCount > 0 ? (
+				{summary.canComplete ? (
+					<Button
+						variant="outline"
+						className="h-10 text-[13px]"
+						onClick={() => setPending("done")}
+					>
+						{t("backlog.markDone")}
+					</Button>
+				) : null}
+				<Button
+					variant="outline"
+					className="h-10 text-[13px]"
+					onClick={() => setPending("waive")}
+				>
+					{t(summary.days > 1 ? "backlog.waiveAll" : "backlog.waive")}
+				</Button>
+
+				{summary.days > 1 ? (
 					<button
 						type="button"
 						onClick={() => setExpanded((v) => !v)}
@@ -152,16 +170,42 @@ export function BacklogSection({
 					>
 						{expanded
 							? t("backlog.showLess")
-							: t("backlog.showMore", { count: String(backlog.hiddenCount) })}
+							: t("backlog.showDays", { count: String(summary.days) })}
 					</button>
 				) : null}
+
+				{expanded
+					? backlog.items.map((r) => (
+							<button
+								key={r.id}
+								type="button"
+								onClick={() =>
+									router.navigate({
+										to: "/submit-review",
+										search: { reviewId: r.id },
+									})
+								}
+								className="flex items-center justify-between gap-2 border-border border-t pt-2 text-[12px] active:opacity-70"
+							>
+								<span className="text-text-secondary">{r.assignedDate}</span>
+								<span className="flex items-center gap-1 text-text-light">
+									{t("backlog.daysLate", { days: String(r.daysLate) })}
+									<ChevronLeft size={13} />
+								</span>
+							</button>
+						))
+					: null}
 			</Card>
 
 			<ConfirmDialog
 				open={pending !== null}
 				message={message}
 				confirmLabel={t(
-					pending?.kind === "waive" ? "backlog.waive" : "backlog.markDone",
+					pending === "waive"
+						? summary.days > 1
+							? "backlog.waiveAll"
+							: "backlog.waive"
+						: "backlog.markDone",
 				)}
 				cancelLabel={t("common.cancel")}
 				loading={busy}
