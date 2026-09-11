@@ -82,13 +82,11 @@ const messages: Record<Locale, Dict> = {
 		"reset.backlog": "{days} أيام متأخرة — خطتك خلف الجدول بـ {pages} صفحة",
 		"reset.intro": "اختر مخرجًا واحدًا، وسترى أثره بالأرقام قبل التأكيد.",
 		"reset.distribute": "وزّع المتأخر",
-		"reset.extend": "مدّد الخطة",
 		"reset.skip": "ابدأ من اليوم",
 		"reset.distributePreview":
 			"{daily} صفحة يوميًا لمدة {days} يومًا، ثم تعود إلى {base}",
-		"reset.extendPreview":
-			"يبقى وردك {daily}، ويتأخر ختمك من {before} إلى {after}",
-		"reset.skipPreview": "تبدأ اليوم من ص {page} — تُسجل {pages} صفحة كمتروكة",
+		"reset.skipPreview":
+			"تكمل اليوم من ص {page} وتُطوى الأيام المتأخرة — يتأخر ختمك من {before} إلى {after}",
 		"reset.catchupDays": "مدة الاستدراك",
 		"reset.daysUnit": "{days} يومًا",
 		"reset.confirm": "تأكيد",
@@ -382,14 +380,11 @@ const messages: Record<Locale, Dict> = {
 		"reset.intro":
 			"Pick one way out. You'll see what it does, in numbers, before confirming.",
 		"reset.distribute": "Spread it out",
-		"reset.extend": "Extend the plan",
 		"reset.skip": "Start from today",
 		"reset.distributePreview":
 			"{daily} pages a day for {days} days, then back to {base}",
-		"reset.extendPreview":
-			"Your daily {daily} stays; your khatmah moves from {before} to {after}",
 		"reset.skipPreview":
-			"You start today at p. {page} — {pages} pages recorded as skipped",
+			"You carry on today from p. {page} and the missed days are cleared — your khatmah moves back {days} days, from {before} to {after}",
 		"reset.catchupDays": "Catch-up window",
 		"reset.daysUnit": "{days} days",
 		"reset.confirm": "Confirm",
@@ -687,14 +682,11 @@ const messages: Record<Locale, Dict> = {
 		"reset.intro":
 			"Wähle einen Ausweg. Du siehst die Auswirkung in Zahlen, bevor du bestätigst.",
 		"reset.distribute": "Verteilen",
-		"reset.extend": "Plan verlängern",
 		"reset.skip": "Heute neu beginnen",
 		"reset.distributePreview":
 			"{daily} Seiten täglich für {days} Tage, dann zurück auf {base}",
-		"reset.extendPreview":
-			"Dein Tagespensum {daily} bleibt; deine Khatma verschiebt sich von {before} auf {after}",
 		"reset.skipPreview":
-			"Du beginnst heute auf S. {page} — {pages} Seiten werden als übersprungen erfasst",
+			"Du machst heute auf S. {page} weiter und die verpassten Tage entfallen — deine Khatma verschiebt sich um {days} Tage, von {before} auf {after}",
 		"reset.catchupDays": "Aufholzeitraum",
 		"reset.daysUnit": "{days} Tage",
 		"reset.confirm": "Bestätigen",

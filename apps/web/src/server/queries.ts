@@ -14,8 +14,7 @@ import {
 	CATCHUP_DAY_CHOICES,
 	distributePreview,
 	effectiveDailyAmount,
-	extendPreview,
-	skipPreview,
+	startTodayPreview,
 } from "@quran/db/domain/plan-reset";
 import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
 import {
@@ -1480,8 +1479,7 @@ export const getPlanResetPreview = createServerFn({ method: "GET" }).handler(
 			catchupActive: plan.catchupUntil != null,
 			pendingPlanChange: blocking.length > 0,
 			distribute: CATCHUP_DAY_CHOICES.map((d) => distributePreview(input, d)),
-			extend: extendPreview(input),
-			skip: skipPreview(input),
+			startToday: startTodayPreview(input),
 		};
 	},
 );
@@ -1501,7 +1499,7 @@ export const getPlanResetPreview = createServerFn({ method: "GET" }).handler(
 export const applyPlanReset = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
-			strategy: z.enum(["distribute", "extend", "skip"]),
+			strategy: z.enum(["distribute", "skip"]),
 			catchupDays: z.number().int().min(3).max(60).optional(),
 		}),
 	)
@@ -1600,8 +1598,7 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 			data.strategy === "distribute"
 				? distributePreview(input, catchupDays)
 				: null;
-		const ext = data.strategy === "extend" ? extendPreview(input) : null;
-		const skp = data.strategy === "skip" ? skipPreview(input) : null;
+		const start = data.strategy === "skip" ? startTodayPreview(input) : null;
 
 		const [event] = await db
 			.insert(planResetEvents)
@@ -1616,16 +1613,14 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 				extraPagesPerDay: dist?.extraPerDay ?? null,
 				catchupDays: dist?.catchupDays ?? null,
 				catchupUntil: dist?.catchupUntil ?? null,
-				skippedFromPage: skp?.skippedFrom ?? null,
-				skippedToPage: skp?.skippedTo ?? null,
-				skippedPages: skp?.skippedPages ?? null,
-				khatmahBefore:
-					dist?.khatmahBefore ??
-					ext?.khatmahBefore ??
-					skp?.khatmahBefore ??
-					null,
-				khatmahAfter:
-					dist?.khatmahAfter ?? ext?.khatmahAfter ?? skp?.khatmahAfter ?? null,
+				// Nothing is written off any more: "start today" forgives the calendar
+				// days, never the pages. The columns stay for events recorded before
+				// that changed.
+				skippedFromPage: null,
+				skippedToPage: null,
+				skippedPages: null,
+				khatmahBefore: dist?.khatmahBefore ?? start?.khatmahBefore ?? null,
+				khatmahAfter: dist?.khatmahAfter ?? start?.khatmahAfter ?? null,
 			})
 			.returning();
 
@@ -1667,25 +1662,18 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 			},
 			todayStr,
 		);
-		// skip moves the cursor forward; the other two leave it where it is. The
-		// cursor lives on the newest review row, so rewriting this row moves it
-		// permanently — without touching plan.startPage, which anchors the khatmah
-		// range and is gated by teacher approval.
-		const newStart =
-			skp?.newStartPage ?? todayReview.startPage ?? input.cursorPage;
+		// Neither strategy moves the cursor, so only the window's *width* can change
+		// here — distribute widens it by the catch-up extra. Any progress already
+		// recorded today stays valid because the window still starts where it did.
+		const newStart = todayReview.startPage ?? input.cursorPage;
 		const newEnd = Math.min(
 			newStart + Math.max(1, todayDaily) - 1,
 			input.planEndPage,
 		);
-		if (newStart !== todayReview.startPage || newEnd !== todayReview.endPage) {
+		if (newEnd !== todayReview.endPage) {
 			await db
 				.update(reviews)
-				.set({
-					startPage: newStart,
-					endPage: newEnd,
-					// Progress only becomes meaningless when the window itself moved.
-					...(skp ? { progressPage: null } : {}),
-				})
+				.set({ startPage: newStart, endPage: newEnd })
 				.where(eq(reviews.id, todayReview.id));
 		}
 
@@ -1698,9 +1686,7 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 		const label =
 			data.strategy === "distribute"
 				? `وزّع المتأخر على ${dist?.catchupDays} يومًا (+${dist?.extraPerDay} صفحة يوميًا)`
-				: data.strategy === "extend"
-					? `مدّد خطته — يتأخر الختم ${ext?.delayDays} يومًا`
-					: `بدأ من اليوم — تُرك ${skp?.skippedPages} صفحة`;
+				: `بدأ من اليوم — يتأخر الختم ${start?.delayDays} يومًا`;
 		const title = "إعادة ضبط الخطة";
 		const body = `${u.name} ${label} بعد ${overdue.length} يومًا متأخرًا`;
 		await db

@@ -1,5 +1,5 @@
 /**
- * Plan-reset maths — the three exits offered to a student who has fallen behind.
+ * Plan-reset maths — the two exits offered to a student who has fallen behind.
  * Pure functions, no DB access.
  *
  * There is no stored plan start date or khatmah target in the schema, so the
@@ -11,9 +11,13 @@
  *
  * `khatmahBefore` is always computed from `idealCursor`, i.e. the finish date the
  * student was promised. Each strategy then reports what it does to that promise:
- * `extend` slips it by exactly the days lost, `distribute` claws it back by
- * temporarily raising the daily amount, and `skip` restores it by jumping the
- * cursor forward and writing off the pages in between.
+ * `distribute` claws it back by temporarily raising the daily amount, and
+ * `startToday` lets it slip by exactly the days lost.
+ *
+ * `startToday` deliberately does *not* move the cursor. Skipping ahead to
+ * `idealCursor` would restore the promised date, but only by writing off pages
+ * the student never read — buying a date with memorisation they still owe. The
+ * honest trade is the other one: forgive the calendar, keep the pages.
  */
 
 /** Catch-up window lengths offered for the "distribute" strategy. */
@@ -47,20 +51,13 @@ export type DistributePreview = {
 	khatmahAfter: string;
 };
 
-export type ExtendPreview = {
+export type StartTodayPreview = {
 	dailyAmount: number;
+	/** Where today's window begins — unchanged: no page is written off. */
+	startPage: number;
 	khatmahBefore: string;
 	khatmahAfter: string;
 	delayDays: number;
-};
-
-export type SkipPreview = {
-	newStartPage: number;
-	skippedFrom: number;
-	skippedTo: number;
-	skippedPages: number;
-	khatmahBefore: string;
-	khatmahAfter: string;
 };
 
 const daily = (n: number) => Math.max(1, n);
@@ -133,7 +130,13 @@ export function distributePreview(
 }
 
 /** Keep the daily amount and accept a later finish — the backlog is simply forgiven. */
-export function extendPreview(i: ResetInput): ExtendPreview {
+/**
+ * Wipe the backlog and carry on from where the student actually is, as if the
+ * plan began today. The daily amount is untouched and no page is skipped, so the
+ * entire cost lands on the finish date: it slips by exactly the days that were
+ * lost, which is the honest price of those days.
+ */
+export function startTodayPreview(i: ResetInput): StartTodayPreview {
 	const before = khatmahBefore(i);
 	const after = estimatedKhatmah(
 		i.today,
@@ -144,27 +147,10 @@ export function extendPreview(i: ResetInput): ExtendPreview {
 		Date.parse(`${after}T00:00:00Z`) - Date.parse(`${before}T00:00:00Z`);
 	return {
 		dailyAmount: daily(i.dailyAmount),
+		startPage: i.cursorPage,
 		khatmahBefore: before,
 		khatmahAfter: after,
 		delayDays: Math.round(delayMs / 86_400_000),
-	};
-}
-
-/** Jump the cursor to where the plan should be today; the pages in between are written off. */
-export function skipPreview(i: ResetInput): SkipPreview {
-	const target = idealCursor(i);
-	const skippedPages = Math.max(0, target - i.cursorPage);
-	return {
-		newStartPage: Math.min(target, i.planEndPage),
-		skippedFrom: i.cursorPage,
-		skippedTo: Math.max(i.cursorPage, target - 1),
-		skippedPages,
-		khatmahBefore: khatmahBefore(i),
-		khatmahAfter: estimatedKhatmah(
-			i.today,
-			remainingPages(target, i.planEndPage),
-			i.dailyAmount,
-		),
 	};
 }
 

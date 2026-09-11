@@ -19,10 +19,9 @@ import {
 	distributePreview,
 	effectiveDailyAmount,
 	estimatedKhatmah,
-	extendPreview,
 	idealCursor,
 	remainingPages,
-	skipPreview,
+	startTodayPreview,
 } from "./plan-reset.ts";
 import {
 	advanceWithinPlan,
@@ -513,7 +512,7 @@ describe("plan-reset distributePreview", () => {
 		const p = distributePreview(RESET, 15);
 		// 144 pages left from 461; ideal position would leave 24 → both finish soon,
 		// and catching up never finishes later than simply extending.
-		expect(p.khatmahAfter <= extendPreview(RESET).khatmahAfter).toBe(true);
+		expect(p.khatmahAfter <= startTodayPreview(RESET).khatmahAfter).toBe(true);
 	});
 
 	it("handles a catch-up window longer than the pages remaining", () => {
@@ -523,30 +522,29 @@ describe("plan-reset distributePreview", () => {
 	});
 });
 
-describe("plan-reset extendPreview", () => {
-	it("slips the khatmah by exactly the days lost", () => {
-		const p = extendPreview(RESET);
+describe("plan-reset startTodayPreview", () => {
+	it("leaves the cursor and the daily amount alone", () => {
+		const p = startTodayPreview(RESET);
+		expect(p.startPage).toBe(RESET.cursorPage);
 		expect(p.dailyAmount).toBe(40);
-		expect(p.delayDays).toBe(3);
+	});
+
+	it("charges the whole cost to the finish date: the days lost, exactly", () => {
+		const p = startTodayPreview(RESET);
+		expect(p.delayDays).toBe(RESET.overdueDays);
 		expect(p.khatmahBefore < p.khatmahAfter).toBe(true);
 	});
-});
 
-describe("plan-reset skipPreview", () => {
-	it("jumps the cursor forward and writes off the pages in between", () => {
-		const p = skipPreview(RESET);
-		expect(p.newStartPage).toBe(581);
-		expect(p.skippedFrom).toBe(461);
-		expect(p.skippedTo).toBe(580);
-		expect(p.skippedPages).toBe(120);
-		// the whole point: the promised finish date is restored
-		expect(p.khatmahAfter).toBe(p.khatmahBefore);
+	it("never writes off pages to buy the date back", () => {
+		// The ideal cursor is 120 pages ahead; starting today deliberately ignores
+		// it, so the pages stay owed and only the calendar gives way.
+		expect(idealCursor(RESET)).toBe(581);
+		expect(startTodayPreview(RESET).startPage).toBe(461);
 	});
 
-	it("clamps at the plan end instead of wrapping into a new khatmah", () => {
-		const p = skipPreview({ ...RESET, cursorPage: 600, overdueDays: 10 });
-		expect(p.newStartPage).toBe(604);
-		expect(p.skippedPages).toBe(5);
+	it("costs nothing once the plan is already finished", () => {
+		const p = startTodayPreview({ ...RESET, cursorPage: 605 });
+		expect(p.khatmahAfter).toBe(RESET.today);
 	});
 });
 

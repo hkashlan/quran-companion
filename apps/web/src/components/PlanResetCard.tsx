@@ -6,16 +6,19 @@ import { applyPlanReset, getPlanResetPreview } from "@/server/queries";
 
 type Preview = Awaited<ReturnType<typeof getPlanResetPreview>>;
 type Loaded = Extract<Preview, { ok: true }>;
-type Strategy = "distribute" | "extend" | "skip";
+type Strategy = "distribute" | "skip";
 
 /**
- * The way out for a student who has fallen behind: one card, three exits, each
- * showing what it actually does before anything happens.
+ * The way out for a student who has fallen behind: one card, two exits, each
+ * showing what it actually does before anything happens. They are the only two
+ * honest answers to a backlog — either catch the pages up, or let the finish
+ * date move. A third exit that skipped ahead over unread pages would buy the
+ * date with memorisation the student still owes, so it is not offered.
  *
  * Deliberately two-step — picking a strategy only expands its numeric preview;
  * a second, explicit confirm applies it. Nothing here executes on a single
  * undescribed tap, because the whole point is that the student understands the
- * trade they are making (more pages a day, a later khatmah, or skipped pages).
+ * trade they are making: more pages a day, or a later khatmah.
  *
  * The preview is fetched on mount rather than folded into the home payload, so
  * the students who have no backlog — most of them — pay nothing for it.
@@ -67,15 +70,11 @@ export function PlanResetCard({ anchorId }: { anchorId?: string }) {
 				days: String(dist.catchupDays),
 				base: String(dist.baseDaily),
 			});
-		if (s === "extend")
-			return t("reset.extendPreview", {
-				daily: String(data.extend.dailyAmount),
-				before: data.extend.khatmahBefore,
-				after: data.extend.khatmahAfter,
-			});
 		return t("reset.skipPreview", {
-			page: String(data.skip.newStartPage),
-			pages: String(data.skip.skippedPages),
+			page: String(data.startToday.startPage),
+			days: String(data.startToday.delayDays),
+			before: data.startToday.khatmahBefore,
+			after: data.startToday.khatmahAfter,
 		});
 	};
 
@@ -107,7 +106,7 @@ export function PlanResetCard({ anchorId }: { anchorId?: string }) {
 		}
 	};
 
-	const options: Strategy[] = ["distribute", "extend", "skip"];
+	const options: Strategy[] = ["distribute", "skip"];
 
 	return (
 		<div id={anchorId} className="scroll-mt-4">
