@@ -1,1 +1,1 @@
-ALTER TABLE "review_plans" DROP COLUMN "cursor_reset";
+ALTER TABLE "review_plans" DROP COLUMN IF EXISTS "cursor_reset";
