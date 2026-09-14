@@ -1,6 +1,6 @@
 {
-  "id": "e346d6a9-d701-4f3c-96b7-849f7b8e5c69",
-  "prevId": "16f95eea-2f44-47fc-857b-c45850a90d8e",
+  "id": "3e026c48-f628-47c9-b82e-47e5a7b9e6b4",
+  "prevId": "e346d6a9-d701-4f3c-96b7-849f7b8e5c69",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1747,6 +1747,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
+        },
+        "waived_at": {
+          "name": "waived_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

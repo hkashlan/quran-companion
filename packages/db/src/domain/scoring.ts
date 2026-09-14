@@ -40,21 +40,43 @@ export function isConsecutive(
  * Next streak value on completion (review_management.py:161-173):
  *  - same day as last completion → unchanged
  *  - exactly the day after → +1
+ *  - a longer gap whose every day was excused → +1 (the streak is frozen, not
+ *    advanced, across excused days)
  *  - any other gap (or first ever) → reset to 1
+ *
+ * `excusedDates` defaults to empty, which is exactly the original behaviour.
  */
 export function nextStreak(
 	currentStreak: number,
 	streakLastDate: string | null,
 	completedDate: string,
+	excusedDates: readonly string[] = [],
 ): number {
 	if (streakLastDate === completedDate) return currentStreak;
-	if (
-		streakLastDate !== null &&
-		diffDays(completedDate, streakLastDate) === 1
-	) {
-		return currentStreak + 1;
+	if (streakLastDate === null) return 1;
+	const gap = diffDays(completedDate, streakLastDate);
+	if (gap === 1) return currentStreak + 1;
+	// A gap only survives if the student excused every single day inside it —
+	// one unexcused day in the middle still breaks the chain.
+	if (gap > 1) {
+		const excused = new Set(excusedDates);
+		const missing = daysBetween(streakLastDate, completedDate);
+		if (missing.length > 0 && missing.every((d) => excused.has(d)))
+			return currentStreak + 1;
 	}
 	return 1;
+}
+
+/** Every calendar day strictly between two YYYY-MM-DD dates, ascending. */
+function daysBetween(from: string, to: string): string[] {
+	const out: string[] = [];
+	const d = new Date(`${from}T00:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + 1);
+	while (d.toISOString().slice(0, 10) < to) {
+		out.push(d.toISOString().slice(0, 10));
+		d.setUTCDate(d.getUTCDate() + 1);
+	}
+	return out;
 }
 
 /** Apply points to a student total, clamped at 0 (review_management.py:163). */

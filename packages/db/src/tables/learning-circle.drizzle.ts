@@ -20,6 +20,10 @@ export const learningCircles = pgTable("learning_circles", {
 	reminderHoursBeforeStart: integer("reminder_hours_before_start")
 		.default(2)
 		.notNull(),
+	// Monthly excuse-day allowance for this circle's students. Nullable with no
+	// default on purpose: null means "inherit the global default", which keeps an
+	// explicit 0 from the teacher distinguishable from "never set".
+	excuseDaysPerMonth: integer("excuse_days_per_month"),
 	code: varchar("code", { length: 8 }).notNull().unique(),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -1,4 +1,8 @@
 import { db } from "@quran/db/db";
+import {
+	catchupExpired,
+	effectiveDailyAmount,
+} from "@quran/db/domain/plan-reset";
 import { lastReachedPage, nextPageWindow } from "@quran/db/domain/review-cycle";
 import { user } from "@quran/db/tables/auth.drizzle";
 import { joinRequests } from "@quran/db/tables/join-request.drizzle";
@@ -14,6 +18,8 @@ import { sendPush } from "./push.ts";
  * Daily scheduler pipeline — the TypeScript replacement for the Python
  * `notification_scheduler` + `procrastinate` worker. Invoked by /api/cron/daily.
  *
+ * It also purges notification deliveries older than the retention window.
+ *
  * For each active review plan:
  *   1. mark the student's overdue pending reviews for that plan as "missed"
  *   2. if no review exists for today, create the next one from the plan
@@ -22,6 +28,15 @@ import { sendPush } from "./push.ts";
  *
  * Returns a summary for the cron response/logs.
  */
+
+/**
+ * How long a notification delivery is kept. The list is a feed, not an archive:
+ * nothing in the app reads a delivery older than this, and the rows only exist
+ * to back the bell screen and to dedupe re-sends. Every dedupe key that could
+ * still be re-issued is scoped to a date or to a one-off row id, so dropping old
+ * rows can never resurrect a notification the user already saw.
+ */
+export const NOTIFICATION_RETENTION_DAYS = 7;
 export type PlanForReview = {
 	id: string;
 	studentId: string;
@@ -29,6 +44,8 @@ export type PlanForReview = {
 	startPage: number | null;
 	endPage: number | null;
 	dailyAmount: number;
+	catchupExtraPages: number | null;
+	catchupUntil: string | null;
 };
 
 /**
@@ -70,11 +87,13 @@ export async function ensureTodayReview(
 		last[0]?.startPage ?? null,
 		last[0]?.endPage ?? null,
 	);
+	// A "distribute" reset temporarily widens the day's window; once the catch-up
+	// window has passed the base amount resumes (and the columns are cleared below).
 	const { startPage, endPage } = nextPageWindow(
 		{
 			startPage: plan.startPage ?? 1,
 			endPage: plan.endPage,
-			dailyAmount: plan.dailyAmount,
+			dailyAmount: effectiveDailyAmount(plan, today),
 		},
 		reached,
 	);
@@ -88,6 +107,14 @@ export async function ensureTodayReview(
 		assignedDate: today,
 		status: "pending",
 	});
+	// Clear any catch-up window that has run out — without this the extra pages
+	// would be added to every future day forever.
+	if (catchupExpired(plan, today)) {
+		await db
+			.update(reviewPlans)
+			.set({ catchupExtraPages: null, catchupUntil: null })
+			.where(eq(reviewPlans.id, plan.id));
+	}
 	const body = `ص ${startPage}–${endPage}`;
 
 	const title = "مراجعة جديدة";
@@ -129,6 +156,8 @@ export async function recalcFutureReviews(
 			startPage: reviewPlans.startPage,
 			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
+			catchupExtraPages: reviewPlans.catchupExtraPages,
+			catchupUntil: reviewPlans.catchupUntil,
 		})
 		.from(reviewPlans)
 		.where(eq(reviewPlans.id, planId))
@@ -138,6 +167,7 @@ export async function recalcFutureReviews(
 	const later = await db
 		.select({
 			id: reviews.id,
+			assignedDate: reviews.assignedDate,
 			startPage: reviews.startPage,
 			endPage: reviews.endPage,
 			progressPage: reviews.progressPage,
@@ -160,11 +190,14 @@ export async function recalcFutureReviews(
 			cursor = lastReachedPage(r.progressPage, r.startPage, r.endPage);
 			continue;
 		}
+		// Each day is re-derived at the amount in force *on that day*, so a student
+		// mid-catch-up keeps their widened windows instead of silently dropping
+		// back to the base amount.
 		const { startPage, endPage } = nextPageWindow(
 			{
 				startPage: plan.startPage ?? 1,
 				endPage: plan.endPage,
-				dailyAmount: plan.dailyAmount,
+				dailyAmount: effectiveDailyAmount(plan, r.assignedDate),
 			},
 			cursor,
 		);
@@ -184,6 +217,13 @@ export async function recalcFutureReviews(
 }
 
 export async function runDailyScheduler(today: string) {
+	const cutoff = new Date(`${today}T00:00:00Z`);
+	cutoff.setUTCDate(cutoff.getUTCDate() - NOTIFICATION_RETENTION_DAYS);
+	const purged = await db
+		.delete(notificationDeliveries)
+		.where(lt(notificationDeliveries.createdAt, cutoff))
+		.returning({ id: notificationDeliveries.id });
+
 	const plans = await db
 		.select({
 			id: reviewPlans.id,
@@ -192,6 +232,8 @@ export async function runDailyScheduler(today: string) {
 			startPage: reviewPlans.startPage,
 			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
+			catchupExtraPages: reviewPlans.catchupExtraPages,
+			catchupUntil: reviewPlans.catchupUntil,
 		})
 		.from(reviewPlans)
 		.where(eq(reviewPlans.isActive, true));
@@ -236,7 +278,13 @@ export async function runDailyScheduler(today: string) {
 		}
 	}
 
-	return { plans: plans.length, created, missed, notified };
+	return {
+		plans: plans.length,
+		created,
+		missed,
+		notified,
+		purged: purged.length,
+	};
 }
 
 /**
@@ -287,6 +335,9 @@ export async function runTeacherSummary(today: string, hour: number) {
 			const end = r.endPage ?? r.startPage ?? 0;
 			const finished =
 				r.status === "completed" ||
+				// Excused/waived days are settled — never push a reminder for them.
+				r.status === "excused" ||
+				r.status === "waived" ||
 				(r.progressPage != null && r.progressPage >= end);
 			// Only nag about students who are behind; finished ones are skipped.
 			if (finished) continue;

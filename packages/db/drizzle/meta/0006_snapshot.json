@@ -1,6 +1,6 @@
 {
-  "id": "e346d6a9-d701-4f3c-96b7-849f7b8e5c69",
-  "prevId": "16f95eea-2f44-47fc-857b-c45850a90d8e",
+  "id": "22b90bb7-99c3-489d-9fe5-871a6c47681f",
+  "prevId": "3e026c48-f628-47c9-b82e-47e5a7b9e6b4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1194,6 +1194,195 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.plan_reset_events": {
+      "name": "plan_reset_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "review_plan_id": {
+          "name": "review_plan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "student_id": {
+          "name": "student_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "teacher_id": {
+          "name": "teacher_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "strategy": {
+          "name": "strategy",
+          "type": "plan_reset_strategy",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backlog_days": {
+          "name": "backlog_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backlog_pages": {
+          "name": "backlog_pages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "waived_count": {
+          "name": "waived_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "extra_pages_per_day": {
+          "name": "extra_pages_per_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "catchup_days": {
+          "name": "catchup_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "catchup_until": {
+          "name": "catchup_until",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skipped_from_page": {
+          "name": "skipped_from_page",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skipped_to_page": {
+          "name": "skipped_to_page",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skipped_pages": {
+          "name": "skipped_pages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "khatmah_before": {
+          "name": "khatmah_before",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "khatmah_after": {
+          "name": "khatmah_after",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "plan_reset_events_studentId_idx": {
+          "name": "plan_reset_events_studentId_idx",
+          "columns": [
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_reset_events_teacherId_idx": {
+          "name": "plan_reset_events_teacherId_idx",
+          "columns": [
+            {
+              "expression": "teacher_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "plan_reset_events_review_plan_id_review_plans_id_fk": {
+          "name": "plan_reset_events_review_plan_id_review_plans_id_fk",
+          "tableFrom": "plan_reset_events",
+          "tableTo": "review_plans",
+          "columnsFrom": [
+            "review_plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plan_reset_events_student_id_user_id_fk": {
+          "name": "plan_reset_events_student_id_user_id_fk",
+          "tableFrom": "plan_reset_events",
+          "tableTo": "user",
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plan_reset_events_teacher_id_user_id_fk": {
+          "name": "plan_reset_events_teacher_id_user_id_fk",
+          "tableFrom": "plan_reset_events",
+          "tableTo": "user",
+          "columnsFrom": [
+            "teacher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.push_tokens": {
       "name": "push_tokens",
       "schema": "",
@@ -1438,6 +1627,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "catchup_extra_pages": {
+          "name": "catchup_extra_pages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "catchup_until": {
+          "name": "catchup_until",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1748,6 +1949,18 @@
           "notNull": true,
           "default": "'pending'"
         },
+        "waived_at": {
+          "name": "waived_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reset_event_id": {
+          "name": "reset_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1851,6 +2064,19 @@
           "tableTo": "review_plans",
           "columnsFrom": [
             "review_plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reviews_reset_event_id_plan_reset_events_id_fk": {
+          "name": "reviews_reset_event_id_plan_reset_events_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "plan_reset_events",
+          "columnsFrom": [
+            "reset_event_id"
           ],
           "columnsTo": [
             "id"
@@ -2224,6 +2450,15 @@
       "values": [
         "daily_amount",
         "start_page"
+      ]
+    },
+    "public.plan_reset_strategy": {
+      "name": "plan_reset_strategy",
+      "schema": "public",
+      "values": [
+        "distribute",
+        "extend",
+        "skip"
       ]
     },
     "public.push_token_kind": {

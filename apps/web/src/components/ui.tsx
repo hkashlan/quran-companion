@@ -140,6 +140,7 @@ export function ConfirmDialog({
 	onCancel,
 	loading = false,
 	destructive = true,
+	children,
 }: {
 	open: boolean;
 	message: string;
@@ -149,6 +150,8 @@ export function ConfirmDialog({
 	onCancel: () => void;
 	loading?: boolean;
 	destructive?: boolean;
+	/** Optional extra input rendered under the message (e.g. a reason field). */
+	children?: ReactNode;
 }) {
 	if (!open) return null;
 	return (
@@ -161,6 +164,7 @@ export function ConfirmDialog({
 			/>
 			<div className="relative w-full max-w-sm rounded-xl bg-surface p-5 shadow-xl">
 				<p className="text-[15px] font-semibold text-text">{message}</p>
+				{children ? <div className="mt-3">{children}</div> : null}
 				<div className="mt-5 flex gap-2">
 					<Button variant="outline" onClick={onCancel} disabled={loading}>
 						{cancelLabel}

@@ -1,5 +1,6 @@
 import {
 	boolean,
+	date,
 	index,
 	integer,
 	pgTable,
@@ -35,6 +36,11 @@ export const reviewPlans = pgTable(
 			.default("verses")
 			.notNull(),
 		isActive: boolean("is_active").default(true).notNull(),
+		// Temporary catch-up after a "distribute" plan reset: extra pages added to
+		// dailyAmount on every day up to and including catchupUntil, after which
+		// ensureTodayReview clears both columns and the base amount resumes.
+		catchupExtraPages: integer("catchup_extra_pages"),
+		catchupUntil: date("catchup_until"),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [
