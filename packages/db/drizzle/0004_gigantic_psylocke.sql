@@ -1,0 +1,1 @@
+ALTER TABLE "review_plans" DROP COLUMN "cursor_reset";

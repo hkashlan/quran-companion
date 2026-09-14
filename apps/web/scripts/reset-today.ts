@@ -114,8 +114,8 @@ async function main() {
 			studentId: reviewPlans.studentId,
 			teacherId: reviewPlans.teacherId,
 			startPage: reviewPlans.startPage,
+			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
-			cursorReset: reviewPlans.cursorReset,
 		})
 		.from(reviewPlans)
 		.where(

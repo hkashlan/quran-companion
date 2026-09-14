@@ -880,7 +880,7 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			"@quran/db/tables/review-plan.drizzle"
 		);
 		const existing = await db
-			.select({ id: reviewPlans.id, startPage: reviewPlans.startPage })
+			.select({ id: reviewPlans.id })
 			.from(reviewPlans)
 			.where(
 				and(
@@ -889,9 +889,6 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				),
 			)
 			.limit(1);
-		// Re-anchor the next review when a teacher edit changes the start page.
-		const startPageChanged =
-			!!existing[0] && (existing[0].startPage ?? null) !== data.startPage;
 		const values = {
 			studentId: data.studentId,
 			teacherId: teacher.id,
@@ -907,7 +904,6 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			dailyAmount: data.dailyAmount,
 			dailyUnit: "pages",
 			isActive: true,
-			cursorReset: startPageChanged,
 		};
 		let planId: string;
 		let updated: boolean;
@@ -938,7 +934,6 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				startPage: values.startPage,
 				endPage: values.endPage,
 				dailyAmount: values.dailyAmount,
-				cursorReset: values.cursorReset,
 			},
 			today(),
 		);
@@ -1009,9 +1004,13 @@ export const getStudentPlan = createServerFn({ method: "GET" }).handler(
 /**
  * Student: request a change to their active plan. A change that *increases* the
  * workload applies immediately (the teacher is just notified): a lower start page
- * (revisiting earlier pages) or more pages/day. A change that *eases* the workload
- * — a later start page (skipping ahead) or fewer pages/day — is queued for teacher
- * approval. Returns `applied` to tell the UI which path happened.
+ * (widening the range backwards) or more pages/day. A change that *eases* the
+ * workload — a later start page (skipping ahead) or fewer pages/day — is queued
+ * for teacher approval. Returns `applied` to tell the UI which path happened.
+ *
+ * Either way the student keeps the page they are on: a new start page only moves
+ * the plan's range, and a new daily amount first takes effect on the next review
+ * the scheduler generates — today's assigned review is never rewritten.
  */
 export const requestPlanChange = createServerFn({ method: "POST" })
 	.validator(
@@ -1067,11 +1066,11 @@ export const requestPlanChange = createServerFn({ method: "POST" })
 					.update(reviewPlans)
 					.set({ dailyAmount: proposed })
 					.where(eq(reviewPlans.id, plan.id));
-			// cursorReset: the next review re-anchors to the new start page.
+			// Only the plan's range moves — the student keeps the page they are on.
 			else
 				await db
 					.update(reviewPlans)
-					.set({ startPage: proposed, cursorReset: true })
+					.set({ startPage: proposed })
 					.where(eq(reviewPlans.id, plan.id));
 			await notifyPlanChange(
 				plan.teacherId,
@@ -1192,7 +1191,7 @@ export const respondPlanChange = createServerFn({ method: "POST" })
 			else if (req.field === "start_page" && req.proposedStartPage != null)
 				await db
 					.update(reviewPlans)
-					.set({ startPage: req.proposedStartPage, cursorReset: true })
+					.set({ startPage: req.proposedStartPage })
 					.where(eq(reviewPlans.id, req.reviewPlanId));
 			await notifyPlanChange(
 				req.studentId,

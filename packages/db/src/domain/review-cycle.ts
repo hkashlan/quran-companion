@@ -131,16 +131,20 @@ export type PagePlanLike = {
  * clamped at the plan's end page (it never spans the end→start boundary); the
  * next day restarts at the start page. `lastEndPage` is the end of the most
  * recent generated review for this plan, or null for the first review.
+ *
+ * Editing the plan's range never drags the student backwards: the cursor is only
+ * re-anchored to `startPage` when it falls *outside* the range — past the end
+ * (a completed cycle), or before a start page that moved forward past where the
+ * student already is. Widening the range backwards (start 100 → 50 while the
+ * student is on page 150) leaves them exactly where they were.
  */
 export function nextPageWindow(
 	plan: PagePlanLike,
 	lastEndPage: number | null,
 ): { startPage: number; endPage: number } {
 	const planEnd = plan.endPage ?? MUSHAF_PAGES;
-	const start =
-		lastEndPage == null || lastEndPage >= planEnd
-			? plan.startPage
-			: lastEndPage + 1;
+	const next = lastEndPage == null ? plan.startPage : lastEndPage + 1;
+	const start = next < plan.startPage || next > planEnd ? plan.startPage : next;
 	const endPage = Math.min(start + Math.max(1, plan.dailyAmount) - 1, planEnd);
 	return { startPage: start, endPage };
 }

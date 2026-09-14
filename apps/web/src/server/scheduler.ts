@@ -29,7 +29,6 @@ export type PlanForReview = {
 	startPage: number | null;
 	endPage: number | null;
 	dailyAmount: number;
-	cursorReset: boolean;
 };
 
 /**
@@ -63,15 +62,14 @@ export async function ensureTodayReview(
 		.orderBy(desc(reviews.createdAt))
 		.limit(1);
 
-	// On a start-page change the cursor is reset: re-anchor to the plan's
-	// startPage (pass null) instead of continuing from the last review's progress.
-	const reached = plan.cursorReset
-		? null
-		: lastReachedPage(
-				last[0]?.progressPage ?? null,
-				last[0]?.startPage ?? null,
-				last[0]?.endPage ?? null,
-			);
+	// The cursor always continues from where the student actually got to. Editing
+	// the plan's range never rewinds them — nextPageWindow only re-anchors to the
+	// plan's startPage when this position falls outside the plan's range.
+	const reached = lastReachedPage(
+		last[0]?.progressPage ?? null,
+		last[0]?.startPage ?? null,
+		last[0]?.endPage ?? null,
+	);
 	const { startPage, endPage } = nextPageWindow(
 		{
 			startPage: plan.startPage ?? 1,
@@ -90,12 +88,6 @@ export async function ensureTodayReview(
 		assignedDate: today,
 		status: "pending",
 	});
-	if (plan.cursorReset) {
-		await db
-			.update(reviewPlans)
-			.set({ cursorReset: false })
-			.where(eq(reviewPlans.id, plan.id));
-	}
 	const body = `ص ${startPage}–${endPage}`;
 
 	const title = "مراجعة جديدة";
@@ -200,7 +192,6 @@ export async function runDailyScheduler(today: string) {
 			startPage: reviewPlans.startPage,
 			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
-			cursorReset: reviewPlans.cursorReset,
 		})
 		.from(reviewPlans)
 		.where(eq(reviewPlans.isActive, true));
