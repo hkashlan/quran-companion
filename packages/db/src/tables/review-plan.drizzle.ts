@@ -30,7 +30,6 @@ export const reviewPlans = pgTable(
 			.default("verses")
 			.notNull(),
 		startPage: integer("start_page"),
-		endPage: integer("end_page"),
 		dailyAmount: integer("daily_amount").notNull(),
 		dailyUnit: varchar("daily_unit", { length: 10 })
 			.default("verses")

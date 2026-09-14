@@ -71,6 +71,13 @@
       "when": 1789368796952,
       "tag": "0009_drop_cursor_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789369139029,
+      "tag": "0010_drop_plan_end_page",
+      "breakpoints": true
     }
   ]
 }

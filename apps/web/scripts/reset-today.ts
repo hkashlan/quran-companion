@@ -114,8 +114,9 @@ async function main() {
 			studentId: reviewPlans.studentId,
 			teacherId: reviewPlans.teacherId,
 			startPage: reviewPlans.startPage,
-			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
+			catchupExtraPages: reviewPlans.catchupExtraPages,
+			catchupUntil: reviewPlans.catchupUntil,
 		})
 		.from(reviewPlans)
 		.where(

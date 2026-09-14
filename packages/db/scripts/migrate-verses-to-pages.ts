@@ -4,7 +4,6 @@
 // For each non-pages plan:
 //   • range_mode      → 'pages'
 //   • start_page      → the mushaf page where its start surah begins
-//   • end_page        → 604 (continuous cursor to the end of the mushaf)
 //   • daily_unit      → 'pages'
 //   • daily_amount    → converted from verses/day (≈15 verses per page, min 1)
 //
@@ -17,7 +16,6 @@ import { eq, ne, or, isNull } from "drizzle-orm";
 
 import { db } from "../src/db.ts";
 import {
-	MUSHAF_PAGES,
 	nextPageWindow,
 	VERSES_PER_PAGE,
 } from "../src/domain/review-cycle.ts";
@@ -44,7 +42,6 @@ for (const plan of plans) {
 		.set({
 			rangeMode: "pages",
 			startPage,
-			endPage: MUSHAF_PAGES,
 			dailyUnit: "pages",
 			dailyAmount,
 		})

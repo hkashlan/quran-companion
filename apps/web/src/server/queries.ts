@@ -910,17 +910,11 @@ export const getStudentModalData = createServerFn({ method: "GET" })
 /** Teacher: create or update the student's active page-based review plan. */
 export const assignReviewPlan = createServerFn({ method: "POST" })
 	.validator(
-		z
-			.object({
-				studentId: z.string(),
-				dailyAmount: z.number().int().min(1),
-				startPage: z.number().int().min(1).max(MUSHAF_PAGES),
-				endPage: z.number().int().min(1).max(MUSHAF_PAGES),
-			})
-			.refine((d) => d.endPage >= d.startPage, {
-				message: "endPage must be >= startPage",
-				path: ["endPage"],
-			}),
+		z.object({
+			studentId: z.string(),
+			dailyAmount: z.number().int().min(1),
+			startPage: z.number().int().min(1).max(MUSHAF_PAGES),
+		}),
 	)
 	.handler(async ({ data }) => {
 		const teacher = await requireUser();
@@ -941,14 +935,14 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			studentId: data.studentId,
 			teacherId: teacher.id,
 			// Verse columns are NOT NULL legacy fields; store placeholders. Plans are
-			// entirely page-based — the scheduler uses startPage/endPage.
+			// entirely page-based — the scheduler runs from startPage to the end of
+			// the mushaf.
 			startSurahNumber: 1,
 			startVerse: 1,
 			endSurahNumber: 1,
 			endVerse: 1,
 			rangeMode: "pages",
 			startPage: data.startPage,
-			endPage: data.endPage,
 			dailyAmount: data.dailyAmount,
 			dailyUnit: "pages",
 			isActive: true,
@@ -984,7 +978,6 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 				studentId: values.studentId,
 				teacherId: values.teacherId,
 				startPage: values.startPage,
-				endPage: values.endPage,
 				dailyAmount: values.dailyAmount,
 				catchupExtraPages: values.catchupExtraPages,
 				catchupUntil: values.catchupUntil,
@@ -1444,7 +1437,7 @@ export const getPlanResetPreview = createServerFn({ method: "GET" }).handler(
 			today: todayStr,
 			dailyAmount: plan.dailyAmount,
 			planStartPage: plan.startPage ?? 1,
-			planEndPage: plan.endPage ?? MUSHAF_PAGES,
+			planEndPage: MUSHAF_PAGES,
 			cursorPage:
 				todayReview?.startPage ?? overdue[0].startPage ?? plan.startPage ?? 1,
 			overdueDays: overdue.length,
@@ -1579,7 +1572,7 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 			today: todayStr,
 			dailyAmount: plan.dailyAmount,
 			planStartPage: plan.startPage ?? 1,
-			planEndPage: plan.endPage ?? MUSHAF_PAGES,
+			planEndPage: MUSHAF_PAGES,
 			cursorPage: todayReview.startPage ?? plan.startPage ?? 1,
 			overdueDays: overdue.length,
 		};

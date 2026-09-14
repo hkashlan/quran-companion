@@ -1,3 +1,4 @@
+import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
 import { getSurahNamesForPageRange } from "@quran/db/domain/surahs";
 
 /** A review/plan range as stored — verse columns are null for pages-mode rows. */
@@ -28,4 +29,16 @@ export function reviewRange(r: ReviewRangeRow): string {
 			? ` – ${r.endSurahName}`
 			: "";
 	return `${r.surahName ?? ""}${end}: ${r.verseFrom ?? ""}–${r.verseTo ?? ""}`;
+}
+
+/**
+ * Human label for a *plan's* range. A plan always runs from its start page to the
+ * end of the mushaf, so only the start page varies.
+ */
+export function planRange(p: { startPage?: number | null }): string {
+	return reviewRange({
+		rangeMode: "pages",
+		startPage: p.startPage ?? 1,
+		endPage: MUSHAF_PAGES,
+	});
 }

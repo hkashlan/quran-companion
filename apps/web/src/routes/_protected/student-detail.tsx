@@ -8,7 +8,7 @@ import { ChevronRight, Flame, Star } from "lucide-react";
 import { ReviewProgress } from "@/components/ReviewProgress";
 import { Card } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
-import { reviewRange } from "@/lib/review-range";
+import { planRange } from "@/lib/review-range";
 import { getStudentDetail, removeReviewPlan } from "@/server/queries";
 
 export const Route = createFileRoute("/_protected/student-detail")({
@@ -37,7 +37,7 @@ function StudentDetail() {
 		router.invalidate();
 	}
 
-	const planRange = plan ? reviewRange(plan) : null;
+	const range = plan ? planRange(plan) : null;
 
 	return (
 		<div className="mx-auto flex min-h-screen max-w-md flex-col gap-4 bg-background p-4">
@@ -97,7 +97,7 @@ function StudentDetail() {
 				</div>
 				{plan ? (
 					<span className="text-[14px] text-text-secondary">
-						{planRange} · {plan.dailyAmount} {t("detail.daily")}
+						{range} · {plan.dailyAmount} {t("detail.daily")}
 					</span>
 				) : (
 					<span className="text-[13px] text-text-light">
