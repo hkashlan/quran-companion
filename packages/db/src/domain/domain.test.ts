@@ -39,6 +39,7 @@ import {
 	calculatePoints,
 	isConsecutive,
 	nextStreak,
+	withSharedRanks,
 } from "./scoring.ts";
 
 describe("scoring.calculatePoints", () => {
@@ -202,6 +203,24 @@ describe("review-cycle page cursor", () => {
 		});
 	});
 
+	it("keeps the student's position when the start page moves backwards", () => {
+		// plan started at 100, student is on page 150; start page widened to 50 →
+		// they stay at 151 instead of being sent back to the new start.
+		expect(nextPageWindow({ startPage: 50, dailyAmount: 10 }, 150)).toEqual({
+			startPage: 151,
+			endPage: 160,
+		});
+	});
+
+	it("pulls the cursor forward when the start page skips past it", () => {
+		// student is on page 150, start page moved to 200 → the old position is
+		// outside the plan's range, so the next window opens at 200.
+		expect(nextPageWindow({ startPage: 200, dailyAmount: 10 }, 150)).toEqual({
+			startPage: 200,
+			endPage: 209,
+		});
+	});
+
 	it("carries a shortfall forward without skipping pages", () => {
 		// window 100–109, student reached only 102 → next day 103–112
 		expect(nextPageWindow({ startPage: 100, dailyAmount: 10 }, 102)).toEqual({
@@ -228,6 +247,36 @@ describe("review-cycle lastReachedPage", () => {
 
 	it("falls back to endPage for verses/legacy rows", () => {
 		expect(lastReachedPage(null, null, 50)).toBe(50);
+	});
+});
+
+describe("leaderboard shared ranks", () => {
+	const ranks = (points: number[]) =>
+		withSharedRanks(points.map((p) => ({ points: p }))).map((r) => r.rank);
+
+	it("gives every distinct score its own place", () => {
+		expect(ranks([30, 20, 10])).toEqual([1, 2, 3]);
+	});
+
+	it("puts everyone on the same score on the same place", () => {
+		expect(ranks([30, 30, 10])).toEqual([1, 1, 3]);
+		expect(ranks([30, 30, 30])).toEqual([1, 1, 1]);
+	});
+
+	it("skips the places a tie used up", () => {
+		expect(ranks([30, 30, 30, 20, 10])).toEqual([1, 1, 1, 4, 5]);
+		expect(ranks([30, 20, 20, 10])).toEqual([1, 2, 2, 4]);
+	});
+
+	it("handles zero-point ties and an empty board", () => {
+		expect(ranks([0, 0])).toEqual([1, 1]);
+		expect(ranks([])).toEqual([]);
+	});
+
+	it("keeps the rest of each entry intact", () => {
+		expect(withSharedRanks([{ id: "a", points: 5 }])).toEqual([
+			{ id: "a", points: 5, rank: 1 },
+		]);
 	});
 });
 

@@ -7,7 +7,6 @@
 //   • end_page        → 604 (continuous cursor to the end of the mushaf)
 //   • daily_unit      → 'pages'
 //   • daily_amount    → converted from verses/day (≈15 verses per page, min 1)
-//   • cursor_reset    → true (next generated review re-anchors to start_page)
 //
 // Pending/missed reviews are re-anchored to a page window so the student's
 // current screen shows pages immediately. Completed reviews are left untouched
@@ -48,7 +47,6 @@ for (const plan of plans) {
 			endPage: MUSHAF_PAGES,
 			dailyUnit: "pages",
 			dailyAmount,
-			cursorReset: true,
 		})
 		.where(eq(reviewPlans.id, plan.id));
 

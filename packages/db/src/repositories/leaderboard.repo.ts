@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "../db.ts";
+import { withSharedRanks } from "../domain/scoring.ts";
 import { user } from "../tables/auth.drizzle.ts";
 import { circleMemberships } from "../tables/circle-membership.drizzle.ts";
 import { reviews } from "../tables/review.drizzle.ts";
@@ -58,7 +59,7 @@ export async function getLeaderboard(
 			.from(user)
 			.where(isLearner())
 			.orderBy(desc(user.points), user.name);
-		return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+		return withSharedRanks(rows);
 	}
 
 	const from = windowStart(today, period === "weekly" ? 7 : 30);
@@ -83,11 +84,12 @@ export async function getLeaderboard(
 		.groupBy(user.id, user.name, user.streak)
 		.orderBy(desc(periodPoints), user.name);
 
-	return rows.map((r, i) => ({
-		rank: i + 1,
-		id: r.id,
-		name: r.name,
-		points: Number(r.points),
-		streak: r.streak,
-	}));
+	return withSharedRanks(
+		rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			points: Number(r.points),
+			streak: r.streak,
+		})),
+	);
 }

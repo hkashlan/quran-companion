@@ -1,16 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlarmClock, Bell, Check, ClipboardList, Crown, Flame } from "lucide-react";
+import {
+	AlarmClock,
+	Bell,
+	Check,
+	ClipboardList,
+	Crown,
+	Flame,
+} from "lucide-react";
 import { useState } from "react";
 import { Ring } from "@/components/DailyProgress";
 import { useI18n } from "@/lib/i18n";
-import { getLeaderboardData, getTeacherToday, nudgeStudent } from "@/server/queries";
+import {
+	getLeaderboardData,
+	getTeacherToday,
+	nudgeStudent,
+} from "@/server/queries";
 
 type Period = "weekly" | "monthly" | "overall";
 const MEDAL = ["#C8A44E", "#9CA3AF", "#B45309"];
 
 export const Route = createFileRoute("/_protected/teacher/leaderboard")({
 	loader: async () => ({
-		leaderboard: await getLeaderboardData({ data: { period: "overall" } }),
+		leaderboard: await getLeaderboardData({ data: { period: "monthly" } }),
 		today: await getTeacherToday(),
 	}),
 	component: TeacherLeaderboard,
@@ -94,9 +105,9 @@ function TodayRow({ student }: { student: TodayStudent }) {
 function TeacherLeaderboard() {
 	const { t } = useI18n();
 	const { leaderboard: initial, today } = Route.useLoaderData();
-	const [period, setPeriod] = useState<Period>("overall");
+	const [period, setPeriod] = useState<Period>("monthly");
 	const [data, setData] = useState(initial);
-	const periods: Period[] = ["weekly", "monthly", "overall"];
+	const periods: Period[] = ["monthly", "weekly", "overall"];
 
 	async function pick(p: Period) {
 		setPeriod(p);

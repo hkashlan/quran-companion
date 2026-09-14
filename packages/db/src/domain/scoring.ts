@@ -83,3 +83,23 @@ function daysBetween(from: string, to: string): string[] {
 export function applyPoints(currentPoints: number, earned: number): number {
 	return Math.max(0, currentPoints + earned);
 }
+
+/**
+ * Standard competition ranking ("1224") over a list already sorted by points,
+ * highest first: everyone on the same score shares the same place, and the next
+ * distinct score skips the places they used up — so a three-way tie at the top
+ * gives 1, 1, 1, then 4.
+ */
+export function withSharedRanks<T extends { points: number }>(
+	rows: T[],
+): (T & { rank: number })[] {
+	let rank = 0;
+	let prevPoints: number | null = null;
+	return rows.map((row, i) => {
+		if (prevPoints === null || row.points !== prevPoints) {
+			rank = i + 1;
+			prevPoints = row.points;
+		}
+		return { ...row, rank };
+	});
+}

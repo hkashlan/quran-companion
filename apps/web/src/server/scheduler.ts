@@ -44,7 +44,6 @@ export type PlanForReview = {
 	startPage: number | null;
 	endPage: number | null;
 	dailyAmount: number;
-	cursorReset: boolean;
 	catchupExtraPages: number | null;
 	catchupUntil: string | null;
 };
@@ -80,15 +79,14 @@ export async function ensureTodayReview(
 		.orderBy(desc(reviews.createdAt))
 		.limit(1);
 
-	// On a start-page change the cursor is reset: re-anchor to the plan's
-	// startPage (pass null) instead of continuing from the last review's progress.
-	const reached = plan.cursorReset
-		? null
-		: lastReachedPage(
-				last[0]?.progressPage ?? null,
-				last[0]?.startPage ?? null,
-				last[0]?.endPage ?? null,
-			);
+	// The cursor always continues from where the student actually got to. Editing
+	// the plan's range never rewinds them — nextPageWindow only re-anchors to the
+	// plan's startPage when this position falls outside the plan's range.
+	const reached = lastReachedPage(
+		last[0]?.progressPage ?? null,
+		last[0]?.startPage ?? null,
+		last[0]?.endPage ?? null,
+	);
 	// A "distribute" reset temporarily widens the day's window; once the catch-up
 	// window has passed the base amount resumes (and the columns are cleared below).
 	const { startPage, endPage } = nextPageWindow(
@@ -109,16 +107,12 @@ export async function ensureTodayReview(
 		assignedDate: today,
 		status: "pending",
 	});
-	// Clear the one-shot cursor reset and any catch-up window that has run out —
-	// without this the extra pages would be added to every future day forever.
-	const expired = catchupExpired(plan, today);
-	if (plan.cursorReset || expired) {
+	// Clear any catch-up window that has run out — without this the extra pages
+	// would be added to every future day forever.
+	if (catchupExpired(plan, today)) {
 		await db
 			.update(reviewPlans)
-			.set({
-				...(plan.cursorReset ? { cursorReset: false } : {}),
-				...(expired ? { catchupExtraPages: null, catchupUntil: null } : {}),
-			})
+			.set({ catchupExtraPages: null, catchupUntil: null })
 			.where(eq(reviewPlans.id, plan.id));
 	}
 	const body = `ص ${startPage}–${endPage}`;
@@ -238,7 +232,6 @@ export async function runDailyScheduler(today: string) {
 			startPage: reviewPlans.startPage,
 			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
-			cursorReset: reviewPlans.cursorReset,
 			catchupExtraPages: reviewPlans.catchupExtraPages,
 			catchupUntil: reviewPlans.catchupUntil,
 		})

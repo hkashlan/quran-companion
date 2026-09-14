@@ -36,10 +36,6 @@ export const reviewPlans = pgTable(
 			.default("verses")
 			.notNull(),
 		isActive: boolean("is_active").default(true).notNull(),
-		// Set when the start page changes (pages mode): the next generated review
-		// re-anchors to startPage instead of continuing from progress. Cleared once
-		// that review is created.
-		cursorReset: boolean("cursor_reset").default(false).notNull(),
 		// Temporary catch-up after a "distribute" plan reset: extra pages added to
 		// dailyAmount on every day up to and including catchupUntil, after which
 		// ensureTodayReview clears both columns and the base amount resumes.

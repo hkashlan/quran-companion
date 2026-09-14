@@ -7,7 +7,7 @@ import { getLeaderboardData } from "@/server/queries";
 type Period = "weekly" | "monthly" | "overall";
 
 export const Route = createFileRoute("/_protected/student/leaderboard")({
-	loader: async () => getLeaderboardData({ data: { period: "overall" } }),
+	loader: async () => getLeaderboardData({ data: { period: "monthly" } }),
 	component: Leaderboard,
 });
 
@@ -17,7 +17,7 @@ function Leaderboard() {
 	const { t } = useI18n();
 	const router = useRouter();
 	const initial = Route.useLoaderData();
-	const [period, setPeriod] = useState<Period>("overall");
+	const [period, setPeriod] = useState<Period>("monthly");
 	const [data, setData] = useState(initial);
 
 	async function pick(p: Period) {
@@ -26,7 +26,7 @@ function Leaderboard() {
 		router.invalidate();
 	}
 
-	const periods: Period[] = ["weekly", "monthly", "overall"];
+	const periods: Period[] = ["monthly", "weekly", "overall"];
 
 	return (
 		<div className="flex flex-col gap-4 p-4">
