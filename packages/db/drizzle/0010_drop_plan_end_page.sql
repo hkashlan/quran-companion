@@ -1,1 +1,0 @@
-ALTER TABLE "review_plans" DROP COLUMN "end_page";

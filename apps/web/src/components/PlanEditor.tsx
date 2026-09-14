@@ -4,7 +4,7 @@ import { Clock } from "lucide-react";
 import { useState } from "react";
 import { Button, Card, Section } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
-import { planRange } from "@/lib/review-range";
+import { reviewRange } from "@/lib/review-range";
 import { type getStudentPlan, requestPlanChange } from "@/server/queries";
 
 export type StudentPlanData = Awaited<ReturnType<typeof getStudentPlan>>;
@@ -82,7 +82,7 @@ export function PlanEditor({ data }: { data: StudentPlanData }) {
 					{t("home.activeReview")}
 				</span>
 				<span className="text-[15px] font-bold text-primary">
-					{planRange(plan)}
+					{reviewRange(plan)}
 				</span>
 				<span className="text-[12px] text-text-light">
 					{plan.dailyAmount} {t("assign.dailyPages")}

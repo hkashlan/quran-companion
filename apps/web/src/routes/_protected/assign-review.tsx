@@ -28,6 +28,7 @@ function AssignReview() {
 	const { student, plan } = Route.useLoaderData();
 
 	const [startPage, setStartPage] = useState(String(plan?.startPage ?? 1));
+	const [endPage, setEndPage] = useState(String(plan?.endPage ?? 604));
 	const [daily, setDaily] = useState(String(plan?.dailyAmount ?? 10));
 	const [saving, setSaving] = useState(false);
 
@@ -35,7 +36,12 @@ function AssignReview() {
 		604,
 		Math.max(1, Number.parseInt(startPage, 10) || 1),
 	);
+	const endNum = Math.min(
+		604,
+		Math.max(pageNum, Number.parseInt(endPage, 10) || 604),
+	);
 	const surahName = getSurahNameForPage(pageNum, "ar");
+	const endSurahName = getSurahNameForPage(endNum, "ar");
 
 	async function save() {
 		setSaving(true);
@@ -43,6 +49,7 @@ function AssignReview() {
 			data: {
 				studentId,
 				startPage: pageNum,
+				endPage: endNum,
 				dailyAmount: Math.max(1, Number.parseInt(daily, 10) || 1),
 			},
 		});
@@ -81,6 +88,23 @@ function AssignReview() {
 				/>
 				<span className="text-[13px] font-semibold text-primary">
 					{surahName}
+				</span>
+			</div>
+
+			<div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+				<span className="text-[14px] font-semibold text-text">
+					{t("assign.endPage")}
+				</span>
+				<input
+					type="number"
+					min={pageNum}
+					max={604}
+					value={endPage}
+					onChange={(e) => setEndPage(e.target.value)}
+					className="w-24 rounded-md border border-border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none"
+				/>
+				<span className="text-[13px] font-semibold text-primary">
+					{endSurahName}
 				</span>
 			</div>
 

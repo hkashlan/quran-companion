@@ -42,6 +42,7 @@ export type PlanForReview = {
 	studentId: string;
 	teacherId: string;
 	startPage: number | null;
+	endPage: number | null;
 	dailyAmount: number;
 	catchupExtraPages: number | null;
 	catchupUntil: string | null;
@@ -91,6 +92,7 @@ export async function ensureTodayReview(
 	const { startPage, endPage } = nextPageWindow(
 		{
 			startPage: plan.startPage ?? 1,
+			endPage: plan.endPage,
 			dailyAmount: effectiveDailyAmount(plan, today),
 		},
 		reached,
@@ -152,6 +154,7 @@ export async function recalcFutureReviews(
 	const [plan] = await db
 		.select({
 			startPage: reviewPlans.startPage,
+			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
 			catchupExtraPages: reviewPlans.catchupExtraPages,
 			catchupUntil: reviewPlans.catchupUntil,
@@ -193,6 +196,7 @@ export async function recalcFutureReviews(
 		const { startPage, endPage } = nextPageWindow(
 			{
 				startPage: plan.startPage ?? 1,
+				endPage: plan.endPage,
 				dailyAmount: effectiveDailyAmount(plan, r.assignedDate),
 			},
 			cursor,
@@ -226,6 +230,7 @@ export async function runDailyScheduler(today: string) {
 			studentId: reviewPlans.studentId,
 			teacherId: reviewPlans.teacherId,
 			startPage: reviewPlans.startPage,
+			endPage: reviewPlans.endPage,
 			dailyAmount: reviewPlans.dailyAmount,
 			catchupExtraPages: reviewPlans.catchupExtraPages,
 			catchupUntil: reviewPlans.catchupUntil,

@@ -116,33 +116,36 @@ export const MUSHAF_PAGES = 604;
 
 export type PagePlanLike = {
 	startPage: number;
+	/**
+	 * Last page of the plan's range. The day's window wraps back to `startPage`
+	 * once this page is reached. Defaults to the full mushaf (604) when
+	 * omitted/null (legacy plans that predate a configurable end page).
+	 */
+	endPage?: number | null;
 	dailyAmount: number;
 };
 
 /**
- * Page-mode cursor: a continuous run from the plan's start page to the end of the
- * mushaf, wrapping back to the start page once page 604 is reached. The day's
- * window is clamped at 604 (it never spans the end→start boundary); the next day
- * restarts at the start page. `lastEndPage` is the end of the most recent
- * generated review for this plan, or null for the first review.
+ * Page-mode cursor: a continuous run from the plan's start page to its end page,
+ * wrapping back to the start page once the end is reached. The day's window is
+ * clamped at the plan's end page (it never spans the end→start boundary); the
+ * next day restarts at the start page. `lastEndPage` is the end of the most
+ * recent generated review for this plan, or null for the first review.
  *
- * Editing the plan never drags the student backwards: the cursor is only
- * re-anchored to `startPage` when it falls *outside* the plan — past the end of
- * the mushaf (a completed cycle), or before a start page that moved forward past
- * where the student already is. Moving the start page backwards (100 → 50 while
- * the student is on page 150) leaves them exactly where they were.
+ * Editing the plan's range never drags the student backwards: the cursor is only
+ * re-anchored to `startPage` when it falls *outside* the range — past the end
+ * (a completed cycle), or before a start page that moved forward past where the
+ * student already is. Widening the range backwards (start 100 → 50 while the
+ * student is on page 150) leaves them exactly where they were.
  */
 export function nextPageWindow(
 	plan: PagePlanLike,
 	lastEndPage: number | null,
 ): { startPage: number; endPage: number } {
+	const planEnd = plan.endPage ?? MUSHAF_PAGES;
 	const next = lastEndPage == null ? plan.startPage : lastEndPage + 1;
-	const start =
-		next < plan.startPage || next > MUSHAF_PAGES ? plan.startPage : next;
-	const endPage = Math.min(
-		start + Math.max(1, plan.dailyAmount) - 1,
-		MUSHAF_PAGES,
-	);
+	const start = next < plan.startPage || next > planEnd ? plan.startPage : next;
+	const endPage = Math.min(start + Math.max(1, plan.dailyAmount) - 1, planEnd);
 	return { startPage: start, endPage };
 }
 
