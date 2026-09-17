@@ -71,6 +71,20 @@
       "when": 1789368796952,
       "tag": "0009_drop_cursor_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789665573288,
+      "tag": "0010_spooky_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789666424851,
+      "tag": "0011_smart_zeigeist",
+      "breakpoints": true
     }
   ]
 }

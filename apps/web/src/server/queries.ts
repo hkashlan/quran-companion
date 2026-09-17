@@ -550,17 +550,72 @@ export const getLateStudents = createServerFn({ method: "GET" }).handler(
 	},
 );
 
+/** Which composer a saved message belongs to (see message-template.drizzle). */
+const templateKind = z.enum(["late", "done"]);
+type TemplateKind = z.infer<typeof templateKind>;
+
+/**
+ * Teacher: students in my circles who *have* finished today's assigned review.
+ * Mirror of getLateStudents — powers the "message done students" screen, where
+ * the teacher congratulates rather than chases.
+ */
+export const getDoneStudents = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const u = await requireUser();
+		const circles = await circlesWithStudents(u.id);
+		const reviewByStudent = await todayReviewByStudent(
+			circles.flatMap((c) => c.students.map((s) => s.id)),
+			today(),
+		);
+
+		const seen = new Set<string>();
+		const students: {
+			id: string;
+			name: string;
+			done: number;
+			target: number;
+		}[] = [];
+		for (const c of circles) {
+			for (const s of c.students) {
+				if (seen.has(s.id)) continue;
+				const r = reviewByStudent.get(s.id);
+				// No plan/review today → nothing to celebrate.
+				if (!r || r.startPage == null || r.endPage == null) continue;
+				// Only genuinely finished reading counts here: an excused/waived day is
+				// settled for the "late" screen but is not an achievement to praise.
+				const finished =
+					r.status === "completed" ||
+					(r.progressPage != null && r.progressPage >= r.endPage);
+				if (!finished) continue;
+				const target = Math.max(1, r.endPage - r.startPage + 1);
+				// They're done, so the row always reads "target / target" — pages read
+				// beyond today's range belong to tomorrow's assignment, not to this one.
+				const done = target;
+				seen.add(s.id);
+				students.push({ id: s.id, name: s.name, done, target });
+			}
+		}
+		return { students };
+	},
+);
+
 /**
  * Teacher: send a free-text message (emoji-friendly) to the selected students —
- * used from the "late students" screen. Restricted to students that are actually
- * in one of the teacher's circles. Each send is un-deduped (timestamped key) so a
- * teacher can message again.
+ * used from the "late students" and "done students" screens. Restricted to
+ * students that are actually in one of the teacher's circles. Each send is
+ * un-deduped (timestamped key) so a teacher can message again.
+ *
+ * `saveTemplate` also stores the text for reuse (deduplicated per teacher, so
+ * saving the same phrasing twice just refreshes its recency).
  */
-export const messageLateStudents = createServerFn({ method: "POST" })
+export const messageStudents = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			studentIds: z.array(z.string()).min(1),
 			message: z.string().trim().min(1).max(500),
+			/** Which composer this was sent from — scopes a saved template. */
+			kind: templateKind,
+			saveTemplate: z.boolean().optional(),
 		}),
 	)
 	.handler(async ({ data }) => {
@@ -581,7 +636,90 @@ export const messageLateStudents = createServerFn({ method: "POST" })
 				"/student",
 			);
 		}
+		if (data.saveTemplate) await upsertTemplate(u.id, data.kind, data.message);
 		return { ok: true as const, sent: targets.length };
+	});
+
+/**
+ * Store (or refresh) one saved message for a teacher, most-recent-use first.
+ * Deduplicated per (teacher, kind, body): the same wording saved on both screens
+ * stays two separate entries, since each screen only lists its own.
+ */
+async function upsertTemplate(
+	teacherId: string,
+	kind: TemplateKind,
+	body: string,
+) {
+	const { messageTemplates } = await import(
+		"@quran/db/tables/message-template.drizzle"
+	);
+	const [existing] = await db
+		.select({ id: messageTemplates.id })
+		.from(messageTemplates)
+		.where(
+			and(
+				eq(messageTemplates.teacherId, teacherId),
+				eq(messageTemplates.kind, kind),
+				eq(messageTemplates.body, body),
+			),
+		)
+		.limit(1);
+	if (existing) {
+		await db
+			.update(messageTemplates)
+			.set({ lastUsedAt: new Date() })
+			.where(eq(messageTemplates.id, existing.id));
+		return existing.id;
+	}
+	const [row] = await db
+		.insert(messageTemplates)
+		.values({ teacherId, kind, body })
+		.returning({ id: messageTemplates.id });
+	return row.id;
+}
+
+/**
+ * Teacher: my saved messages for one composer, handiest (most recently used)
+ * first.
+ */
+export const getMessageTemplates = createServerFn({ method: "GET" })
+	.validator(z.object({ kind: templateKind }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { messageTemplates } = await import(
+			"@quran/db/tables/message-template.drizzle"
+		);
+		const templates = await db
+			.select({ id: messageTemplates.id, body: messageTemplates.body })
+			.from(messageTemplates)
+			.where(
+				and(
+					eq(messageTemplates.teacherId, u.id),
+					eq(messageTemplates.kind, data.kind),
+				),
+			)
+			.orderBy(desc(messageTemplates.lastUsedAt))
+			.limit(20);
+		return { templates };
+	});
+
+/** Teacher: drop one of my saved messages. */
+export const deleteMessageTemplate = createServerFn({ method: "POST" })
+	.validator(z.object({ id: z.string() }))
+	.handler(async ({ data }) => {
+		const u = await requireUser();
+		const { messageTemplates } = await import(
+			"@quran/db/tables/message-template.drizzle"
+		);
+		await db
+			.delete(messageTemplates)
+			.where(
+				and(
+					eq(messageTemplates.id, data.id),
+					eq(messageTemplates.teacherId, u.id),
+				),
+			);
+		return { ok: true as const };
 	});
 
 /** Teacher: pending join requests across circles I own. */
