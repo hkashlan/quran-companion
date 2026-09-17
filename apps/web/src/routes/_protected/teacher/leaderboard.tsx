@@ -6,6 +6,7 @@ import {
 	ClipboardList,
 	Crown,
 	Flame,
+	PartyPopper,
 } from "lucide-react";
 import { useState } from "react";
 import { Ring } from "@/components/DailyProgress";
@@ -116,15 +117,22 @@ function TeacherLeaderboard() {
 
 	return (
 		<div className="flex flex-col gap-4 p-4">
-			<div className="flex items-center justify-between gap-2">
-				<h1 className="text-[22px] font-bold text-text">
-					{t("leaderboard.today")}
-				</h1>
+			<h1 className="text-[22px] font-bold text-text">
+				{t("leaderboard.today")}
+			</h1>
+			{/* Message the two groups today splits into: behind, and finished. */}
+			<div className="flex flex-wrap items-center gap-2">
 				<Link
 					to="/teacher/late-students"
 					className="flex items-center gap-1.5 rounded-md bg-accent-light px-3 py-2 text-[12px] font-semibold text-text"
 				>
 					<AlarmClock size={16} /> {t("late.title")}
+				</Link>
+				<Link
+					to="/teacher/done-students"
+					className="flex items-center gap-1.5 rounded-md bg-primary-light px-3 py-2 text-[12px] font-semibold text-text"
+				>
+					<PartyPopper size={16} /> {t("done.title")}
 				</Link>
 			</div>
 			<div className="flex flex-col gap-3">

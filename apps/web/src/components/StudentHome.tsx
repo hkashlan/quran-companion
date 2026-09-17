@@ -93,6 +93,7 @@ function PagesProgressEditor({ review }: { review: EditableReview }) {
 						setText(e.target.value);
 						setSaved(false);
 					}}
+					onFocus={(e) => e.currentTarget.select()}
 					aria-invalid={showError}
 					className={`w-24 rounded-md border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none ${
 						showError ? "border-error" : "border-border"
