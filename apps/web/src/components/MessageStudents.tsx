@@ -27,19 +27,24 @@ export type MessageStudent = {
 
 export type MessageTemplate = { id: string; body: string };
 
+/** Which composer this is — scopes the saved messages it offers. */
+export type MessageKind = "late" | "done";
+
 /**
  * "Pick students, write a message, send it" screen — shared by the late-students
  * and done-students routes, which differ only in who they list and in the copy
- * around the list. Saved messages (templates) are the teacher's own, so they are
- * offered on both screens.
+ * around the list. Saved messages are scoped to `kind`: a chase-up and a
+ * congratulation are never interchangeable, so each screen keeps its own set.
  */
 export function MessageStudents({
+	kind,
 	title,
 	subtitle,
 	emptyText,
 	students,
 	templates: initialTemplates,
 }: {
+	kind: MessageKind;
 	title: string;
 	subtitle: string;
 	emptyText: string;
@@ -85,6 +90,7 @@ export function MessageStudents({
 			data: {
 				studentIds: [...selected],
 				message: trimmed,
+				kind,
 				// Re-saving text that is already a template would be a no-op anyway.
 				saveTemplate: save && !alreadySaved,
 			},
@@ -250,7 +256,6 @@ export function MessageStudents({
 					>
 						{sent ? t("late.sent") : t("late.send")}
 					</Button>
-
 				</>
 			)}
 		</div>

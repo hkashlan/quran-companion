@@ -7,7 +7,7 @@ export const Route = createFileRoute("/_protected/teacher/done-students")({
 	loader: async () => {
 		const [done, saved] = await Promise.all([
 			getDoneStudents(),
-			getMessageTemplates(),
+			getMessageTemplates({ data: { kind: "done" } }),
 		]);
 		return { students: done.students, templates: saved.templates };
 	},
@@ -19,6 +19,7 @@ function DoneStudents() {
 	const { students, templates } = Route.useLoaderData();
 	return (
 		<MessageStudents
+			kind="done"
 			title={t("done.title")}
 			subtitle={t("done.subtitle")}
 			emptyText={t("done.none")}
