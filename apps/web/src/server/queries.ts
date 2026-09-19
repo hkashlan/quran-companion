@@ -1463,8 +1463,8 @@ export const getSubmitReviewData = createServerFn({ method: "GET" })
 
 /**
  * Forgive overdue reviews. Used for backlog rows old enough that completing them
- * would *cost* points (`calculatePoints` goes negative past two days late) — the
- * student should be able to clear them without a penalty.
+ * earns nothing (`calculatePoints` pays zero past two days late) — the student
+ * should be able to clear them off the board either way.
  *
  * Takes a list rather than a single id because a backlog is answered as a group:
  * every missed day re-issues the same page window, so "let it go" is one decision

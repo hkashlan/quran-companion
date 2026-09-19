@@ -48,9 +48,10 @@ describe("scoring.calculatePoints", () => {
 		expect(calculatePoints("2026-06-11", "2026-06-12")).toEqual([5, 1]);
 		expect(calculatePoints("2026-06-10", "2026-06-12")).toEqual([0, 2]);
 	});
-	it("penalises -5 per extra day beyond 2", () => {
-		expect(calculatePoints("2026-06-09", "2026-06-12")).toEqual([-5, 3]);
-		expect(calculatePoints("2026-06-08", "2026-06-12")).toEqual([-10, 4]);
+	it("never goes negative, however late", () => {
+		expect(calculatePoints("2026-06-09", "2026-06-12")).toEqual([0, 3]);
+		expect(calculatePoints("2026-06-08", "2026-06-12")).toEqual([0, 4]);
+		expect(calculatePoints("2026-01-01", "2026-06-12")).toEqual([0, 162]);
 	});
 	it("treats early completion as on time", () => {
 		expect(calculatePoints("2026-06-13", "2026-06-12")).toEqual([10, -1]);

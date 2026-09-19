@@ -17,8 +17,9 @@ export const BACKLOG_COLLAPSE_ALL = 7;
 /** Past this many overdue items the "reset your plan" card is offered. */
 export const RESET_THRESHOLD_DAYS = 2;
 /**
- * Past this many days late, `calculatePoints` turns negative — so "I did it"
- * stops being an offer and becomes a punishment. Beyond it only waiving is sane.
+ * Past this many days late, `calculatePoints` pays nothing — completing stops
+ * buying the student anything, so waiving is the cleaner exit. (It never *costs*
+ * points; the floor is zero.)
  */
 export const COMPLETE_MAX_DAYS_LATE = 2;
 
@@ -73,7 +74,7 @@ export type BacklogSummary = {
 	/**
 	 * Whether "I did it" is still worth offering. Completing the newest row awards
 	 * its own (possibly reduced) points; past `COMPLETE_MAX_DAYS_LATE` that number
-	 * is negative, so the only non-punitive exit left is to waive.
+	 * is zero, so waiving says the same thing with less ceremony.
 	 */
 	canComplete: boolean;
 };

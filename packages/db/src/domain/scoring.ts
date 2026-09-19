@@ -12,8 +12,13 @@ export function diffDays(a: string, b: string): number {
 
 /**
  * Points earned for completing a review, decreasing with lateness:
- * 10 (on time), 5 (1 day late), 0 (2 days late), then -5 per extra day.
- * Mirrors scoring.py::calculate_points. Returns [points, diffDays].
+ * 10 (on time), 5 (1 day late), 0 from two days late on.
+ *
+ * Lateness never *costs* points — the floor is zero. A student who comes back
+ * after a long absence should find catching up worth nothing, never worth less
+ * than nothing: a debt would make finishing the work worse than abandoning it.
+ * (This diverges deliberately from scoring.py::calculate_points, which subtracted
+ * 5 per extra day.) Returns [points, diffDays].
  */
 export function calculatePoints(
 	assignedDate: string,
@@ -23,8 +28,7 @@ export function calculatePoints(
 	let points: number;
 	if (d <= 0) points = 10;
 	else if (d === 1) points = 5;
-	else if (d === 2) points = 0;
-	else points = -5 * (d - 2);
+	else points = 0;
 	return [points, d];
 }
 

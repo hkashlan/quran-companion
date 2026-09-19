@@ -28,11 +28,12 @@ type PendingAction = "done" | "waive";
  * read, because `recalcFutureReviews` only re-anchors rows *after* the one it was
  * given. The group is the honest unit: one range, one age, one decision.
  *
- * Two exits rather than one, because the points curve makes a single action wrong
- * at one end: `calculatePoints` awards 10/5 for 0–1 days late but goes *negative*
- * from three days on. So "I did it" scores the newest row and waives the rest (one
- * reading earns points once), and is offered only while that row still pays;
- * "let it all go" is the amnesty that leaves points and the completed count alone.
+ * Two exits rather than one, because the points curve makes a single action thin
+ * at one end: `calculatePoints` awards 10/5 for 0–1 days late and nothing (never
+ * less than nothing) from two days on. So "I did it" scores the newest row and
+ * waives the rest (one reading earns points once), and is offered only while that
+ * row still pays; "let it all go" is the amnesty that leaves points and the
+ * completed count alone.
  * Past `BACKLOG_COLLAPSE_ALL` days the list stops being useful at all and is
  * replaced by the plan-reset invitation.
  */
