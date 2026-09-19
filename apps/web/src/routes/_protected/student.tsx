@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { BarChart3, Bell, Home, Settings, Trophy } from "lucide-react";
 import { BottomTabBar } from "@/components/BottomTabBar";
+import { TeacherMessageBanner } from "@/components/TeacherMessageBanner";
 import { useI18n } from "@/lib/i18n";
 import { getNotifications } from "@/server/queries";
 
@@ -11,15 +12,21 @@ import { getNotifications } from "@/server/queries";
  */
 export const Route = createFileRoute("/_protected/student")({
 	loader: async () => {
-		const { unread } = await getNotifications();
-		return { unread };
+		const { items, unread } = await getNotifications();
+		// Newest first from the repo, so the first match is the latest message.
+		// Only the last unread one is pinned as a banner above every tab.
+		const m = items.find((n) => n.eventType === "teacher_message" && !n.isRead);
+		return {
+			unread,
+			teacherMessage: m ? { id: m.id, title: m.title, body: m.body } : null,
+		};
 	},
 	component: StudentShell,
 });
 
 function StudentShell() {
 	const { t } = useI18n();
-	const { unread } = Route.useLoaderData();
+	const { unread, teacherMessage } = Route.useLoaderData();
 	const tabs = [
 		{ to: "/student", icon: <Home size={22} />, label: t("nav.home") },
 		{
@@ -46,6 +53,12 @@ function StudentShell() {
 	];
 	return (
 		<div className="mx-auto min-h-screen max-w-md bg-background pb-16">
+			{teacherMessage ? (
+				<TeacherMessageBanner
+					key={teacherMessage.id}
+					message={teacherMessage}
+				/>
+			) : null}
 			<Outlet />
 			<BottomTabBar tabs={tabs} />
 		</div>

@@ -13,6 +13,30 @@ export const Route = createFileRoute("/_protected/student/leaderboard")({
 
 const MEDAL = ["#C8A44E", "#9CA3AF", "#B45309"];
 
+type Entry = {
+	rank: number;
+	id: string;
+	name: string;
+	points: number;
+	streak: number;
+};
+
+/**
+ * Entries already carry shared ranks, so everyone tied on points repeats the
+ * same rank in a row. Collapse each of those runs into one leaderboard row.
+ */
+function groupByRank(
+	entries: Entry[],
+): { rank: number; points: number; members: Entry[] }[] {
+	const groups: { rank: number; points: number; members: Entry[] }[] = [];
+	for (const e of entries) {
+		const last = groups[groups.length - 1];
+		if (last && last.rank === e.rank) last.members.push(e);
+		else groups.push({ rank: e.rank, points: e.points, members: [e] });
+	}
+	return groups;
+}
+
 function Leaderboard() {
 	const { t } = useI18n();
 	const router = useRouter();
@@ -27,6 +51,7 @@ function Leaderboard() {
 	}
 
 	const periods: Period[] = ["monthly", "weekly", "overall"];
+	const groups = groupByRank(data.entries);
 
 	return (
 		<div className="flex flex-col gap-4 p-4">
@@ -51,42 +76,46 @@ function Leaderboard() {
 			</div>
 
 			<div className="flex flex-col gap-2">
-				{data.entries.map((e) => {
-					const isMe = e.id === data.meId;
+				{groups.map((g) => {
+					const hasMe = g.members.some((m) => m.id === data.meId);
 					return (
 						<div
-							key={e.id}
+							key={g.members[0].id}
 							className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${
-								isMe
+								hasMe
 									? "border-primary bg-primary-light"
 									: "border-border bg-surface"
 							}`}
 						>
 							<div
-								className="flex h-11 w-11 items-center justify-center rounded-md"
+								className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md"
 								style={{
 									background:
-										e.rank <= 3 ? `${MEDAL[e.rank - 1]}33` : "#F5F7F4",
+										g.rank <= 3 ? `${MEDAL[g.rank - 1]}33` : "#F5F7F4",
 								}}
 							>
-								{e.rank <= 3 ? (
-									<Crown size={20} color={MEDAL[e.rank - 1]} />
+								{g.rank <= 3 ? (
+									<Crown size={20} color={MEDAL[g.rank - 1]} />
 								) : (
 									<span className="text-[13px] font-bold text-text-secondary">
-										{e.rank}
+										{g.rank}
 									</span>
 								)}
 							</div>
-							<div className="flex flex-1 flex-col">
-								<span className="text-[13px] font-bold text-text">
-									{e.name}
-								</span>
-								<span className="flex items-center gap-1 text-[12px] text-text-secondary">
-									<Flame size={14} color="#C8A44E" /> {e.streak}
-								</span>
+							<div className="flex flex-1 flex-col gap-1">
+								{g.members.map((m) => (
+									<div key={m.id} className="flex flex-col">
+										<span className="text-[13px] font-bold text-text">
+											{m.name}
+										</span>
+										<span className="flex items-center gap-1 text-[12px] text-text-secondary">
+											<Flame size={14} color="#C8A44E" /> {m.streak}
+										</span>
+									</div>
+								))}
 							</div>
-							<span className="rounded-md bg-surface-elevated bg-[#F5F7F4] px-2.5 py-1.5 text-[13px] font-bold text-text">
-								{e.points}
+							<span className="shrink-0 rounded-md bg-surface-elevated bg-[#F5F7F4] px-2.5 py-1.5 text-[13px] font-bold text-text">
+								{g.points}
 							</span>
 						</div>
 					);
