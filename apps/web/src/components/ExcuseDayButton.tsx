@@ -114,7 +114,7 @@ export function ExcuseDayButton({ date }: { date: string }) {
 				</span>
 				<Button
 					variant="ghost"
-					className="h-8 w-auto px-2 text-[12px]"
+					className="h-9! w-auto! px-2 text-[13px]!"
 					disabled={status.remaining <= 0}
 					onClick={() => setAsking(true)}
 				>

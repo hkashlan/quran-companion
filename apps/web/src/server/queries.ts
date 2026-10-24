@@ -27,6 +27,7 @@ import {
 import {
 	getLeaderboard,
 	type LeaderboardPeriod,
+	leaderboardRange,
 } from "@quran/db/repositories/leaderboard";
 import {
 	deleteAll,
@@ -379,8 +380,19 @@ export const getLeaderboardData = createServerFn({ method: "GET" })
 	.validator((d: { period: LeaderboardPeriod }) => d)
 	.handler(async ({ data }) => {
 		const u = await requireUser();
-		const entries = await getLeaderboard(data.period, today());
-		return { entries, meId: u.id };
+		const todayStr = today();
+		// Hide everyone still on 0 points except the viewer, who always sees
+		// where they stand. Ranks are assigned first and 0 sorts last, so
+		// dropping those rows leaves every remaining rank unchanged.
+		const entries = (await getLeaderboard(data.period, todayStr)).filter(
+			(e) => e.points > 0 || e.id === u.id,
+		);
+		return {
+			entries,
+			meId: u.id,
+			period: data.period,
+			range: leaderboardRange(data.period, todayStr),
+		};
 	});
 
 export const getNotifications = createServerFn({ method: "GET" }).handler(

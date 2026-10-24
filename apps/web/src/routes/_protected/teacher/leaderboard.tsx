@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Ring } from "@/components/DailyProgress";
+import { LeaderboardPeriod } from "@/components/LeaderboardPeriod";
 import { useI18n } from "@/lib/i18n";
 import {
 	getLeaderboardData,
@@ -169,6 +170,7 @@ function TeacherLeaderboard() {
 					</button>
 				))}
 			</div>
+			<LeaderboardPeriod period={data.period} range={data.range} />
 			<div className="flex flex-col gap-2">
 				{data.entries.map((e) => (
 					<div

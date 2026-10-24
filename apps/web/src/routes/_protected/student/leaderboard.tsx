@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Crown, Flame } from "lucide-react";
 import { useState } from "react";
+import { LeaderboardPeriod } from "@/components/LeaderboardPeriod";
 import { useI18n } from "@/lib/i18n";
 import { getLeaderboardData } from "@/server/queries";
 
@@ -74,6 +75,7 @@ function Leaderboard() {
 					</button>
 				))}
 			</div>
+			<LeaderboardPeriod period={data.period} range={data.range} />
 
 			<div className="flex flex-col gap-2">
 				{groups.map((g) => {

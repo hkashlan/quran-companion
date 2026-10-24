@@ -1,13 +1,15 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import {
 	BookOpen,
+	ChevronDown,
 	Clock,
 	LogOut,
 	MapPin,
 	Search,
 	SlidersHorizontal,
+	Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { BacklogSection } from "@/components/BacklogList";
 import { DailyProgress } from "@/components/DailyProgress";
 import { ExcuseDayButton } from "@/components/ExcuseDayButton";
@@ -95,7 +97,7 @@ function PagesProgressEditor({ review }: { review: EditableReview }) {
 					}}
 					onFocus={(e) => e.currentTarget.select()}
 					aria-invalid={showError}
-					className={`w-24 rounded-md border bg-background px-3 py-2.5 text-[15px] font-semibold text-text outline-none ${
+					className={`h-[54px] w-24 rounded-lg border bg-background px-3 text-[15px] font-semibold text-text outline-none ${
 						showError ? "border-error" : "border-border"
 					}`}
 				/>
@@ -242,10 +244,102 @@ export function PendingRequestsSection({
 }
 
 /**
- * Everything on the student home below the header: stat cards, countdown, my
- * circles (or the join box), pending requests, today's review, the plan link
- * and outstanding reviews. Rendered at /student, and embedded on the teacher
- * home for a teacher who is also a student in another teacher's circle.
+ * Header strip of the active-review card: the circle(s) the student reviews in,
+ * tapping open to the details and the (rarely used) leave action, with `action`
+ * (the plan chip) pinned to the other side.
+ */
+function CircleSummary({
+	circles,
+	onLeave,
+	action,
+}: {
+	circles: StudentHomeData["circles"];
+	onLeave: (circleId: string) => void;
+	action: ReactNode;
+}) {
+	const { t } = useI18n();
+	const [open, setOpen] = useState(false);
+	const location = circles.find((c) => c.location)?.location;
+
+	return (
+		<div className="flex flex-col gap-3">
+			<div className="flex items-center justify-between gap-3">
+				<button
+					type="button"
+					onClick={() => setOpen((o) => !o)}
+					aria-expanded={open}
+					className="flex min-w-0 items-center gap-2.5 text-start active:opacity-80"
+				>
+					<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-light text-primary">
+						<Users size={18} />
+					</span>
+					<span className="flex min-w-0 flex-col">
+						<span className="truncate text-[14px] font-bold text-text">
+							{circles.map((c) => c.title).join(" · ")}
+						</span>
+						{location ? (
+							<span className="flex items-center gap-1 truncate text-[12px] text-text-light">
+								<MapPin size={12} className="shrink-0" /> {location}
+							</span>
+						) : null}
+					</span>
+					<ChevronDown
+						size={16}
+						className={`shrink-0 text-text-light transition-transform ${open ? "rotate-180" : ""}`}
+					/>
+				</button>
+				{action}
+			</div>
+
+			{open
+				? circles.map((c) => (
+						<div
+							key={c.id}
+							className="flex flex-col gap-1.5 rounded-lg bg-background p-3"
+						>
+							{circles.length > 1 ? (
+								<span className="text-[13px] font-bold text-text">
+									{c.title}
+								</span>
+							) : null}
+							{c.description ? (
+								<span className="text-[12px] text-text-secondary">
+									{c.description}
+								</span>
+							) : null}
+							{circles.length > 1 && c.location ? (
+								<span className="flex items-center gap-1 text-[12px] text-text-light">
+									<MapPin size={12} /> {c.location}
+								</span>
+							) : null}
+							<div className="flex items-center justify-between gap-2">
+								<span className="text-[12px] text-text-secondary">
+									{t("teacher.code")}:{" "}
+									<span className="font-semibold text-text" dir="ltr">
+										{c.code}
+									</span>
+								</span>
+								<button
+									type="button"
+									onClick={() => onLeave(c.id)}
+									className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-semibold text-error active:bg-error/10"
+								>
+									<LogOut size={13} /> {t("home.leave")}
+								</button>
+							</div>
+						</div>
+					))
+				: null}
+		</div>
+	);
+}
+
+/**
+ * Everything on the student home below the header: stat cards, today's review
+ * (with the circle and the plan link folded into its card), the join box when
+ * there's no circle, pending requests and outstanding reviews. Rendered at
+ * /student, and embedded on the teacher home for a teacher who is also a
+ * student in another teacher's circle.
  * Meant to sit inside a `flex flex-col gap-4` container.
  */
 export function StudentHomeBody({
@@ -253,7 +347,7 @@ export function StudentHomeBody({
 	planTo = "/student/plan",
 }: {
 	data: StudentHomeData;
-	/** Where the plan card leads — the teacher shell has its own copy of the editor. */
+	/** Where the plan chip leads — the teacher shell has its own copy of the editor. */
 	planTo?: "/student/plan" | "/teacher/plan";
 }) {
 	const { t } = useI18n();
@@ -262,6 +356,7 @@ export function StudentHomeBody({
 	// Circle pending a leave confirmation, or null when the dialog is closed.
 	const [leavingId, setLeavingId] = useState<string | null>(null);
 	const [leaving, setLeaving] = useState(false);
+	const hasCircle = data.circles.length > 0;
 
 	async function confirmLeave() {
 		if (!leavingId) return;
@@ -272,19 +367,24 @@ export function StudentHomeBody({
 		router.invalidate();
 	}
 
-	const planCard = (
-		<Card className="flex items-center justify-between">
-			<span className="flex items-center gap-2 text-[14px] font-semibold text-text">
-				<SlidersHorizontal size={18} className="text-primary" />
-				{t("plan.title")}
-			</span>
-			{data.hasPendingPlanChange ? (
-				<span className="flex items-center gap-1 text-[12px] text-text-light">
-					<Clock size={13} /> {t("plan.awaitingApproval")}
-				</span>
-			) : null}
-		</Card>
+	const planChipClass =
+		"flex shrink-0 items-center gap-1.5 rounded-full bg-primary-light px-3 py-1.5 text-[12px] font-semibold text-primary active:opacity-80";
+	const planChipBody = (
+		<>
+			<SlidersHorizontal size={14} />
+			{t("plan.title")}
+		</>
 	);
+	const planChip =
+		planTo === "/teacher/plan" ? (
+			<Link to="/teacher/plan" className={planChipClass}>
+				{planChipBody}
+			</Link>
+		) : (
+			<Link to="/student/plan" className={planChipClass}>
+				{planChipBody}
+			</Link>
+		);
 
 	return (
 		<>
@@ -311,55 +411,85 @@ export function StudentHomeBody({
 				/>
 			</div>
 
-			<div className="flex items-center justify-center gap-2 text-secondary">
-				<span className="text-[16px] font-bold">{countdown}</span>
-				<span className="text-[13px] text-text-secondary">
-					{t("home.timeRemaining")}
-				</span>
-			</div>
-
-			{data.circles.length === 0 ? (
-				<JoinCircleCard />
-			) : (
-				<Section title={t("home.myCircles")}>
-					<Card className="flex flex-col gap-3 p-3">
-						{data.circles.map((c) => (
-							<div
-								key={c.id}
-								className="flex flex-col gap-1 border-b border-border pb-3 last:border-0 last:pb-0"
-							>
-								<div className="flex items-center justify-between">
-									<span className="text-[14px] font-bold text-text">
-										{c.title}
-									</span>
-									<span className="text-[12px] text-text-secondary">
-										{c.code}
-									</span>
-								</div>
-								{c.description ? (
-									<span className="text-[12px] text-text-secondary">
-										{c.description}
-									</span>
-								) : null}
-								{c.location ? (
-									<span className="flex items-center gap-1 text-[12px] text-text-light">
-										<MapPin size={12} /> {c.location}
-									</span>
-								) : null}
-								<button
-									type="button"
-									onClick={() => setLeavingId(c.id)}
-									className="mt-1 flex items-center gap-1 self-start rounded-md px-2 py-1 text-[12px] font-semibold text-error active:bg-error/10"
-								>
-									<LogOut size={13} /> {t("home.leave")}
-								</button>
-							</div>
-						))}
-					</Card>
-				</Section>
+			{hasCircle ? null : (
+				<>
+					<JoinCircleCard />
+					<PendingRequestsSection requests={data.pendingRequests} />
+				</>
 			)}
 
-			<PendingRequestsSection requests={data.pendingRequests} />
+			<section className="flex flex-col gap-3">
+				<div className="flex items-center justify-between gap-2">
+					<h2 className="text-[13px] font-bold text-text">
+						{t("home.activeReview")}
+					</h2>
+					{data.activeReview ? (
+						<span className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+							<Clock size={13} className="text-secondary" />
+							<span className="text-[14px] font-bold text-secondary tabular-nums">
+								{countdown}
+							</span>
+							{t("home.timeRemaining")}
+						</span>
+					) : null}
+				</div>
+
+				<Card className="flex flex-col gap-3">
+					{hasCircle ? (
+						<CircleSummary
+							circles={data.circles}
+							onLeave={setLeavingId}
+							action={planChip}
+						/>
+					) : (
+						<div className="flex justify-end">{planChip}</div>
+					)}
+					{data.hasPendingPlanChange ? (
+						<span className="flex items-center gap-1 text-[12px] text-text-light">
+							<Clock size={13} /> {t("plan.title")} ·{" "}
+							{t("plan.awaitingApproval")}
+						</span>
+					) : null}
+
+					<div className="border-t border-border" />
+
+					{data.activeReview ? (
+						<>
+							<span className="rounded-md bg-primary-light px-3 py-2 text-center text-[15px] font-bold text-primary">
+								{reviewRange(data.activeReview)}
+							</span>
+							<DailyProgress
+								review={data.activeReview}
+								streak={data.user.streak}
+							/>
+							{data.activeReview.status === "excused" ? null : data.activeReview
+									.startPage != null ? (
+								<PagesProgressEditor review={data.activeReview} />
+							) : (
+								<Button
+									onClick={() =>
+										router.navigate({
+											to: "/submit-review",
+											search: { reviewId: data.activeReview?.id },
+										})
+									}
+								>
+									{t("home.submit")}
+								</Button>
+							)}
+							<ExcuseDayButton date={data.activeReview.assignedDate} />
+						</>
+					) : (
+						<p className="py-2 text-center text-[13px] text-text-secondary">
+							{t("home.noActiveReview")}
+						</p>
+					)}
+				</Card>
+			</section>
+
+			{hasCircle ? (
+				<PendingRequestsSection requests={data.pendingRequests} />
+			) : null}
 
 			<BacklogSection
 				backlog={data.backlog}
@@ -369,50 +499,6 @@ export function StudentHomeBody({
 			{data.backlog.showResetCard ? (
 				<PlanResetCard anchorId={RESET_ANCHOR} />
 			) : null}
-
-			<Section title={t("home.activeReview")}>
-				{data.activeReview ? (
-					<Card className="flex flex-col gap-3">
-						<span className="rounded-md bg-primary-light px-3 py-2 text-center text-[15px] font-bold text-primary">
-							{reviewRange(data.activeReview)}
-						</span>
-						<DailyProgress
-							review={data.activeReview}
-							streak={data.user.streak}
-						/>
-						{data.activeReview.status === "excused" ? null : data.activeReview
-								.startPage != null ? (
-							<PagesProgressEditor review={data.activeReview} />
-						) : (
-							<Button
-								onClick={() =>
-									router.navigate({
-										to: "/submit-review",
-										search: { reviewId: data.activeReview?.id },
-									})
-								}
-							>
-								{t("home.submit")}
-							</Button>
-						)}
-						<ExcuseDayButton date={data.activeReview.assignedDate} />
-					</Card>
-				) : (
-					<Card className="text-center text-[13px] text-text-secondary">
-						{t("home.noActiveReview")}
-					</Card>
-				)}
-			</Section>
-
-			{planTo === "/teacher/plan" ? (
-				<Link to="/teacher/plan" className="block">
-					{planCard}
-				</Link>
-			) : (
-				<Link to="/student/plan" className="block">
-					{planCard}
-				</Link>
-			)}
 
 			<ConfirmDialog
 				open={leavingId !== null}
