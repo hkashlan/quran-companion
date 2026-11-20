@@ -58,6 +58,9 @@ export type PlanForReview = {
 export async function ensureTodayReview(
 	plan: PlanForReview,
 	today: string,
+	// false when the student starts tomorrow's review early themselves — they're
+	// looking at it, so a "new review" push would only be noise.
+	opts: { notify?: boolean } = {},
 ): Promise<boolean> {
 	const existingToday = await db
 		.select({ id: reviews.id })
@@ -115,6 +118,7 @@ export async function ensureTodayReview(
 			.set({ catchupExtraPages: null, catchupUntil: null })
 			.where(eq(reviewPlans.id, plan.id));
 	}
+	if (opts.notify === false) return true;
 	const body = `ص ${startPage}–${endPage}`;
 
 	const title = "مراجعة جديدة";
@@ -214,6 +218,49 @@ export async function recalcFutureReviews(
 		}
 	}
 	return changed;
+}
+
+/**
+ * Keep a review the student started ahead of its day (see startAheadReview) in
+ * step with a plan edit. Its window was derived from the plan as it was, so after
+ * a change it's re-derived from today's progress — or, if the plan is gone,
+ * dropped while still untouched (a scored one keeps its points).
+ */
+export async function resyncAheadReviews(
+	planId: string,
+	today: string,
+): Promise<void> {
+	const [plan] = await db
+		.select({ isActive: reviewPlans.isActive })
+		.from(reviewPlans)
+		.where(eq(reviewPlans.id, planId))
+		.limit(1);
+	if (!plan?.isActive) {
+		await db
+			.delete(reviews)
+			.where(
+				and(
+					eq(reviews.reviewPlanId, planId),
+					gt(reviews.assignedDate, today),
+					sql`${reviews.completedAt} is null`,
+				),
+			);
+		return;
+	}
+	const [todayReview] = await db
+		.select({
+			progressPage: reviews.progressPage,
+			startPage: reviews.startPage,
+			endPage: reviews.endPage,
+		})
+		.from(reviews)
+		.where(
+			and(eq(reviews.reviewPlanId, planId), eq(reviews.assignedDate, today)),
+		)
+		.orderBy(desc(reviews.createdAt))
+		.limit(1);
+	if (!todayReview) return;
+	await recalcFutureReviews(planId, { assignedDate: today, ...todayReview });
 }
 
 export async function runDailyScheduler(today: string) {

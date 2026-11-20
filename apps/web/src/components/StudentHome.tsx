@@ -3,6 +3,7 @@ import {
 	BookOpen,
 	ChevronDown,
 	Clock,
+	FastForward,
 	LogOut,
 	MapPin,
 	Search,
@@ -28,6 +29,7 @@ import {
 	type getStudentHome,
 	joinCircleByCode,
 	leaveCircleFn,
+	startAheadReview,
 	submitReview,
 } from "@/server/queries";
 
@@ -48,7 +50,14 @@ type EditableReview = {
  * student report the page they've reached — including past the day's target — and
  * change it any time; progress is monotonic so the ring only ever climbs.
  */
-function PagesProgressEditor({ review }: { review: EditableReview }) {
+function PagesProgressEditor({
+	review,
+	hintKey = "submit.pagesHint",
+}: {
+	review: EditableReview;
+	/** Target line under the input — tomorrow's card names its own day. */
+	hintKey?: string;
+}) {
 	const { t } = useI18n();
 	const router = useRouter();
 	const start = review.startPage ?? 1;
@@ -115,7 +124,7 @@ function PagesProgressEditor({ review }: { review: EditableReview }) {
 				</p>
 			) : (
 				<span className="text-[12px] text-text-secondary">
-					{t("submit.pagesHint", {
+					{t(hintKey, {
 						from: start,
 						to: end,
 						reached: review.progressPage ?? "—",
@@ -128,6 +137,73 @@ function PagesProgressEditor({ review }: { review: EditableReview }) {
 				</p>
 			) : null}
 		</div>
+	);
+}
+
+/**
+ * "Get ahead" card, shown once today's target is met: offers tomorrow's pages,
+ * and once started lets the student report progress on them like today's.
+ */
+function AheadReviewCard({
+	ahead,
+	streak,
+}: {
+	ahead: NonNullable<StudentHomeData["ahead"]>;
+	streak: number;
+}) {
+	const { t } = useI18n();
+	const router = useRouter();
+	const [starting, setStarting] = useState(false);
+	const review = ahead.review;
+	const range = review ?? ahead.preview;
+
+	async function start() {
+		setStarting(true);
+		const res = await startAheadReview();
+		setStarting(false);
+		if (res.ok) router.invalidate();
+	}
+
+	return (
+		<section className="flex flex-col gap-3">
+			<h2 className="flex items-center gap-1.5 text-[13px] font-bold text-text">
+				<FastForward size={14} className="text-primary" />
+				{t("home.aheadTitle")}
+			</h2>
+			<Card className="flex flex-col gap-3">
+				{review ? (
+					<>
+						<span className="rounded-md bg-primary-light px-3 py-2 text-center text-[15px] font-bold text-primary">
+							{reviewRange(review)}
+						</span>
+						{review.completedAt != null ? (
+							<p className="text-center text-[13px] font-semibold text-primary">
+								{t("home.aheadDone")}
+							</p>
+						) : (
+							<DailyProgress review={review} streak={streak} />
+						)}
+						<PagesProgressEditor
+							key={review.id}
+							review={review}
+							hintKey="home.aheadPagesHint"
+						/>
+					</>
+				) : (
+					<>
+						<p className="text-[13px] text-text-secondary">
+							{t("home.aheadHint", {
+								from: range.startPage ?? "",
+								to: range.endPage ?? "",
+							})}
+						</p>
+						<Button variant="outline" onClick={start} loading={starting}>
+							{t("home.aheadStart")}
+						</Button>
+					</>
+				)}
+			</Card>
+		</section>
 	);
 }
 
@@ -486,6 +562,10 @@ export function StudentHomeBody({
 					)}
 				</Card>
 			</section>
+
+			{data.ahead ? (
+				<AheadReviewCard ahead={data.ahead} streak={data.user.streak} />
+			) : null}
 
 			{hasCircle ? (
 				<PendingRequestsSection requests={data.pendingRequests} />

@@ -11,12 +11,17 @@ import {
 	monthKey,
 } from "@quran/db/domain/excuse";
 import {
+	addDaysStr,
 	CATCHUP_DAY_CHOICES,
 	distributePreview,
 	effectiveDailyAmount,
 	startTodayPreview,
 } from "@quran/db/domain/plan-reset";
-import { MUSHAF_PAGES } from "@quran/db/domain/review-cycle";
+import {
+	lastReachedPage,
+	MUSHAF_PAGES,
+	nextPageWindow,
+} from "@quran/db/domain/review-cycle";
 import {
 	createCircle,
 	findCircleByCode,
@@ -42,7 +47,18 @@ import { joinRequests } from "@quran/db/tables/join-request.drizzle";
 import { reviews } from "@quran/db/tables/review.drizzle";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import {
+	and,
+	asc,
+	count,
+	desc,
+	eq,
+	gt,
+	inArray,
+	lt,
+	lte,
+	sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { circleMateDoneMessage } from "./notification-i18n.ts";
@@ -252,7 +268,14 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 		const pending = await db
 			.select()
 			.from(reviews)
-			.where(and(eq(reviews.studentId, u.id), eq(reviews.status, "pending")))
+			.where(
+				and(
+					eq(reviews.studentId, u.id),
+					eq(reviews.status, "pending"),
+					// Tomorrow's review, started early, isn't outstanding work.
+					lte(reviews.assignedDate, today()),
+				),
+			)
 			.orderBy(desc(reviews.assignedDate));
 
 		const missed = await db
@@ -338,6 +361,49 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 		}
 		if (!activeReview) activeReview = pending[0] ?? null;
 
+		// Getting ahead: once today's target is met the student may start tomorrow's
+		// review now. `ahead.review` is that row once started; until then `preview`
+		// is the window it would get (same derivation as ensureTodayReview).
+		let ahead: {
+			date: string;
+			preview: { startPage: number; endPage: number };
+			review: typeof reviews.$inferSelect | null;
+		} | null = null;
+		if (
+			activePlan &&
+			activeReview &&
+			activeReview.reviewPlanId === activePlan.id &&
+			activeReview.assignedDate === todayStr &&
+			activeReview.completedAt != null &&
+			activeReview.status !== "excused"
+		) {
+			const tomorrow = addDaysStr(todayStr, 1);
+			const [aheadReview] = await db
+				.select()
+				.from(reviews)
+				.where(
+					and(
+						eq(reviews.reviewPlanId, activePlan.id),
+						eq(reviews.assignedDate, tomorrow),
+					),
+				)
+				.orderBy(desc(reviews.createdAt))
+				.limit(1);
+			const preview = nextPageWindow(
+				{
+					startPage: activePlan.startPage ?? 1,
+					endPage: activePlan.endPage,
+					dailyAmount: effectiveDailyAmount(activePlan, tomorrow),
+				},
+				lastReachedPage(
+					activeReview.progressPage,
+					activeReview.startPage,
+					activeReview.endPage,
+				),
+			);
+			ahead = { date: tomorrow, preview, review: aheadReview ?? null };
+		}
+
 		// Outstanding work: older pending + missed reviews, minus today's active
 		// review and any pages review that already met its target (still editable
 		// on the active-review card).
@@ -359,6 +425,7 @@ export const getStudentHome = createServerFn({ method: "GET" }).handler(
 			pendingRequests,
 			hasPendingPlanChange: pendingPlanChange.length > 0,
 			activeReview,
+			ahead,
 			// Collapsed view for the home screen: newest few, colour-graded by age,
 			// with the escalation flags. Pages are a *union* — a missed day re-issues
 			// its window, so the rows overlap and must never be summed.
@@ -964,7 +1031,7 @@ export const removeReviewPlan = createServerFn({ method: "POST" })
 		const { reviewPlans } = await import(
 			"@quran/db/tables/review-plan.drizzle"
 		);
-		await db
+		const deactivated = await db
 			.update(reviewPlans)
 			.set({ isActive: false })
 			.where(
@@ -972,7 +1039,10 @@ export const removeReviewPlan = createServerFn({ method: "POST" })
 					eq(reviewPlans.studentId, data.studentId),
 					eq(reviewPlans.isActive, true),
 				),
-			);
+			)
+			.returning({ id: reviewPlans.id });
+		const { resyncAheadReviews } = await import("./scheduler.ts");
+		for (const p of deactivated) await resyncAheadReviews(p.id, today());
 		return { ok: true };
 	});
 
@@ -1141,6 +1211,8 @@ export const assignReviewPlan = createServerFn({ method: "POST" })
 			},
 			today(),
 		);
+		const { resyncAheadReviews } = await import("./scheduler.ts");
+		await resyncAheadReviews(planId, today());
 		return { ok: true, updated };
 	});
 
@@ -1397,6 +1469,8 @@ export const respondPlanChange = createServerFn({ method: "POST" })
 					.update(reviewPlans)
 					.set({ startPage: req.proposedStartPage })
 					.where(eq(reviewPlans.id, req.reviewPlanId));
+			const { resyncAheadReviews } = await import("./scheduler.ts");
+			await resyncAheadReviews(req.reviewPlanId, today());
 			await notifyPlanChange(
 				req.studentId,
 				"plan_change_approved",
@@ -1827,6 +1901,8 @@ export const applyPlanReset = createServerFn({ method: "POST" })
 		}
 
 		const refreshed = (await loadToday()) ?? todayReview;
+		const { resyncAheadReviews } = await import("./scheduler.ts");
+		await resyncAheadReviews(plan.id, todayStr);
 
 		// Tell the teacher: the student resets on their own, but never silently.
 		const { notificationDeliveries } = await import(
@@ -2091,6 +2167,52 @@ export const getCircleExcuseUsage = createServerFn({ method: "GET" })
 		};
 	});
 
+/**
+ * Student: start tomorrow's review now, after finishing today's. Creates the row
+ * for tomorrow (continuing from the page reached today) so progress on it can be
+ * reported straight away; tomorrow's cron then finds it and leaves it alone.
+ * Only one day ahead, and only once today's target is met.
+ */
+export const startAheadReview = createServerFn({ method: "POST" }).handler(
+	async () => {
+		const u = await requireUser();
+		const { reviewPlans } = await import(
+			"@quran/db/tables/review-plan.drizzle"
+		);
+		const [plan] = await db
+			.select()
+			.from(reviewPlans)
+			.where(
+				and(eq(reviewPlans.studentId, u.id), eq(reviewPlans.isActive, true)),
+			)
+			.limit(1);
+		if (!plan) return { ok: false as const, error: "no_plan" as const };
+
+		const todayStr = today();
+		const [todayReview] = await db
+			.select({ completedAt: reviews.completedAt, status: reviews.status })
+			.from(reviews)
+			.where(
+				and(
+					eq(reviews.reviewPlanId, plan.id),
+					eq(reviews.assignedDate, todayStr),
+				),
+			)
+			.orderBy(desc(reviews.createdAt))
+			.limit(1);
+		if (
+			!todayReview ||
+			todayReview.completedAt == null ||
+			todayReview.status === "excused"
+		)
+			return { ok: false as const, error: "today_unfinished" as const };
+
+		const { ensureTodayReview } = await import("./scheduler.ts");
+		await ensureTodayReview(plan, addDaysStr(todayStr, 1), { notify: false });
+		return { ok: true as const };
+	},
+);
+
 /** Student: report page progress → completes + scores the review once the target is met. */
 export const submitReview = createServerFn({ method: "POST" })
 	.validator(
@@ -2115,6 +2237,10 @@ export const submitReview = createServerFn({ method: "POST" })
 		if (!review) return { ok: false as const };
 
 		const todayStr = today();
+		// A review done ahead of its day counts for *its* day, so finishing
+		// tomorrow's pages tonight carries the streak through tomorrow.
+		const streakDate =
+			review.assignedDate > todayStr ? review.assignedDate : todayStr;
 		const streakLastDate =
 			(u as { streakLastDate?: string | null }).streakLastDate ?? null;
 
@@ -2143,7 +2269,7 @@ export const submitReview = createServerFn({ method: "POST" })
 			// Days the student excused since their last completion don't break the
 			// chain. Only the gap matters, so nothing is loaded when there isn't one.
 			const excusedDates =
-				streakLastDate && diffDays(todayStr, streakLastDate) > 1
+				streakLastDate && diffDays(streakDate, streakLastDate) > 1
 					? (
 							await db
 								.select({ date: excuseDays.date })
@@ -2152,23 +2278,26 @@ export const submitReview = createServerFn({ method: "POST" })
 									and(
 										eq(excuseDays.userId, u.id),
 										gt(excuseDays.date, streakLastDate),
-										lt(excuseDays.date, todayStr),
+										lt(excuseDays.date, streakDate),
 									),
 								)
 						).map((r) => r.date)
 					: [];
-			const newStreak = nextStreak(
-				u.streak,
-				streakLastDate,
-				todayStr,
-				excusedDates,
-			);
+			// Never move the streak date backwards (an old backlog day done after
+			// working ahead must not undo the day already credited).
+			const newStreak =
+				streakLastDate && streakLastDate > streakDate
+					? u.streak
+					: nextStreak(u.streak, streakLastDate, streakDate, excusedDates);
 			await db
 				.update(userTable)
 				.set({
 					points: newPoints,
 					streak: newStreak,
-					streakLastDate: todayStr,
+					streakLastDate:
+						streakLastDate && streakLastDate > streakDate
+							? streakLastDate
+							: streakDate,
 				})
 				.where(eq(userTable.id, u.id));
 		} else {
